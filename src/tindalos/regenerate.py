@@ -236,7 +236,7 @@ def regenerate_node(
     kind = _classify_node(work, nid)
     if kind is None:
         raise ValueError(
-            f"未知节点 id：{node_id}（支持 scene-*/event-*/npc-*/clue-*）"
+            f"未知节点 id：{node_id}（支持 act-N-scene-N / act-N-scene-N-ev-N / npc-N / clue-N）"
         )
 
     applied: list[str] = []

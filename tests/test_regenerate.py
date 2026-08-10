@@ -302,6 +302,10 @@ def test_regenerate_unknown_id_raises_value_error():
     for bad in ("npc-99", "scene-99", "event-99", "clue-99", "bogus", "act-1"):
         with pytest.raises(ValueError, match="未知"):
             regenerate_node(cam, bad, GEN)
+    # 回归（diagnosing-bugs）：错误消息提示真实 id 格式（act-N-scene-N 而非笼统 scene-*）
+    with pytest.raises(ValueError, match=r"act-N-scene-N.*npc-N.*clue-N") as ei:
+        regenerate_node(cam, "scene-99", GEN)
+    assert "scene-99" in str(ei.value)
     # 输入未被修改
     assert _dump(cam)["acts"][0]["scenes"][0]["events"][0]["description"] == "众人抵达旧码头。"
 
