@@ -92,65 +92,7 @@ def _coerce_type(t: Any) -> Any:
     return t
 
 
-def _construct_loose(raw: dict) -> Campaign:
-    """宽松构造（model_construct 跳过校验）：dict 无法通过 models 校验时也能继续修复循环。
-
-    与 t5 eval 的宽松哲学一致（坏剧本本就是本循环的输入对象，不应因 schema 缺陷而中断）。
-    """
-    return Campaign.model_construct(
-        id=raw.get("id", ""),
-        title=raw.get("title", ""),
-        premise=raw.get("premise", ""),
-        acts=[
-            Act.model_construct(
-                id=a.get("id", ""), title=a.get("title", ""), roman=a.get("roman", ""),
-                summary=a.get("summary", ""),
-                scenes=[
-                    Scene.model_construct(
-                        id=s.get("id", ""), title=s.get("title", ""),
-                        setting=s.get("setting", {}),
-                        events=[
-                            Event.model_construct(
-                                id=e.get("id", ""), title=e.get("title", ""),
-                                kind=e.get("kind"), description=e.get("description", ""),
-                                conditions=e.get("conditions", []),
-                                next_event_ids=e.get("next_event_ids", []),
-                            )
-                            for e in s.get("events", [])
-                        ],
-                        npc_ids=s.get("npc_ids", []),
-                    )
-                    for s in a.get("scenes", [])
-                ],
-                npc_ids=a.get("npc_ids", []),
-            )
-            for a in raw.get("acts", [])
-        ],
-        npcs={
-            k: NPC.model_construct(
-                id=v.get("id", k), name=v.get("name", ""), archetype=v.get("archetype", ""),
-                personality=v.get("personality", []), description=v.get("description", ""),
-                acts_roles=v.get("acts_roles", {}),
-            )
-            for k, v in raw.get("npcs", {}).items()
-        },
-        clues=[
-            Clue.model_construct(
-                id=c.get("id", ""), name=c.get("name", ""), description=c.get("description", ""),
-                linked_npc_ids=c.get("linked_npc_ids", []),
-                linked_event_ids=c.get("linked_event_ids", []), found_at=c.get("found_at"),
-            )
-            for c in raw.get("clues", [])
-        ],
-        relations=[
-            WorldRelation.model_construct(
-                source=r.get("source", ""), target=r.get("target", ""), type=_coerce_type(r.get("type")),
-                label=r.get("label", ""), valid_from=r.get("valid_from", ""),
-                valid_to=r.get("valid_to"), note=r.get("note"),
-            )
-            for r in raw.get("relations", [])
-        ],
-    )
+from tindalos.models import construct_loose_campaign as _construct_loose
 
 
 def _coerce_campaign(campaign: Any) -> tuple[Campaign, str]:
