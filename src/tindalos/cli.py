@@ -16,9 +16,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,7 +29,8 @@ from tindalos.eval_.judge import LLMJudge
 from tindalos.eval_.report import eval_report
 from tindalos.generator import DeterministicGenerator, Generator, OllamaGenerator
 from tindalos.kg import build_from_campaign
-from tindalos.models import Act, Campaign, Clue, NPC, WorldRelation, construct_loose_campaign as _construct_loose
+from tindalos.models import Campaign, construct_loose_campaign as _construct_loose
+from tindalos.pipeline import compose_campaign, extract_premise, render_notes
 
 app = typer.Typer(help="Tindalos 克苏鲁 TRPG 备团 CLI", no_args_is_help=True)
 
@@ -85,28 +84,6 @@ def _resolve_generator(use_llm: bool) -> Generator:
 # ---------------------------------------------------------------- generate 内部
 
 
-def _extract_premise(module_text: str) -> str:
-    """从模组文本提取前提：优先「前提：」行，其次首段。"""
-    lines = [l.strip() for l in (module_text or "").splitlines() if l.strip()]
-    for line in lines:
-        low = line.lower()
-        if low.startswith("前提") or low.startswith("premise"):
-            return re.split(r"[:：]", line, maxsplit=1)[-1].strip()[:200] or line[:200]
-    if not lines:
-        return "无名模组"
-    first = lines[0].lstrip("#").strip()
-    return first[:200] if first else "无名模组"
-
-
-def _title_from_text(module_text: str) -> str:
-    lines = [l.strip() for l in (module_text or "").splitlines() if l.strip()]
-    for line in lines:
-        cleaned = line.lstrip("#").strip()
-        if cleaned and "：" not in cleaned[:8]:
-            return cleaned[:40]
-    return "未命名模组"
-
-
 def _premise_from_json(doc: dict) -> str:
     for key in ("premise", "前提", "title", "name"):
         v = doc.get(key)
@@ -132,48 +109,7 @@ def _read_module(module_file: Path) -> tuple[str, str]:
             raise ValueError("模组 JSON 缺少 premise/前提/title 键")
         return premise, premise
     text = p.read_text(encoding="utf-8")
-    return text, _extract_premise(text)
-
-
-def _build_clues_and_relations(acts: list[dict], npcs: dict) -> tuple[list[dict], list[dict]]:
-    """装配线索与 KG 关系（与 pipeline.compose 同构）：每幕一条线索 + 指向边 + 幕间认识边。"""
-    clues: list[dict] = []
-    relations: list[dict] = []
-    for i, act in enumerate(acts):
-        scenes = act.get("scenes", [])
-        if not scenes:
-            continue
-        outcome = scenes[0]["events"][-1]
-        clue_id = f"clue-{act['id']}"
-        npc_id = (act.get("npc_ids") or list(npcs))[0]
-        clues.append(
-            {
-                "id": clue_id,
-                "name": f"{act.get('title', act['id'])}的关键线索",
-                "description": "指向本幕真相的关键线索。",
-                "linked_npc_ids": [npc_id],
-                "linked_event_ids": [outcome["id"]],
-            }
-        )
-        relations.append(
-            {
-                "source": npc_id, "target": clue_id, "type": "指向",
-                "label": "指向线索", "valid_from": "1900-01-01",
-            }
-        )
-        if i + 1 < len(acts):
-            nxt_id = (acts[i + 1].get("npc_ids") or list(npcs))[0]
-            relations.append(
-                {
-                    "source": npc_id, "target": nxt_id, "type": "认识",
-                    "label": "互相认识", "valid_from": "1900-01-01",
-                }
-            )
-    return clues, relations
-
-
-def _campaign_id_for(module_text: str) -> str:
-    return "campaign-" + hashlib.sha1((module_text or "").strip().encode("utf-8")).hexdigest()[:8]
+    return text, extract_premise(text)
 
 
 def _generate_campaign(
@@ -183,7 +119,10 @@ def _generate_campaign(
     n_acts: int = _DEFAULT_N_ACTS,
     n_npcs: int = _DEFAULT_N_NPCS,
 ) -> Campaign:
-    """生成器 → 完整 Campaign：幕（重编号场景/事件 id，保证全局唯一）+ NPC + 线索 + 关系。"""
+    """生成器 → 完整 Campaign：幕（重编号场景/事件 id，保证全局唯一）+ NPC。
+
+    线索/关系/Campaign 装配与备团笔记统一委托 pipeline.compose_campaign（t10 去重复）。
+    """
     act_drafts = generator.generate_acts(premise, n_acts)
     npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
     npc_ids = list(npcs.keys())
@@ -209,47 +148,7 @@ def _generate_campaign(
             scenes.append(scene)
         draft["scenes"] = scenes
         acts.append(draft)
-    clues, relations = _build_clues_and_relations(acts, npcs)
-    return Campaign(
-        id=_campaign_id_for(module_text),
-        title=f"模组《{_title_from_text(module_text)}》",
-        premise=premise,
-        acts=[Act(**a) for a in acts],
-        npcs={nid: NPC(**n) for nid, n in npcs.items()},
-        clues=[Clue(**c) for c in clues],
-        relations=[WorldRelation(**r) for r in relations],
-    )
-
-
-# ---------------------------------------------------------------- 备团笔记
-
-
-def render_notes(campaign: Campaign) -> str:
-    """备团笔记 markdown：前提 / 幕（场景+事件）/ NPC 一览 / 世界关系。宽松构造输入亦可渲染。"""
-    lines = [f"# 备团笔记：{campaign.title}", "", f"**模组 id**：`{campaign.id}`", ""]
-    lines += ["## 前提", "", campaign.premise or "（无）", ""]
-    lines += ["## 幕"]
-    for act in campaign.acts:
-        lines += [f"### {act.title}", "", act.summary or "", ""]
-        for scene in act.scenes:
-            setting = scene.setting or {}
-            lines += [f"#### {scene.title}（{setting.get('time', '')}·{setting.get('place', '')}）", ""]
-            for ev in scene.events:
-                lines.append(f"- **{ev.title}**（{ev.kind}）：{ev.description}")
-            lines.append("")
-    lines += ["## NPC 一览", ""]
-    for npc in campaign.npcs.values():
-        personality = "、".join(npc.personality or []) or "（无特质）"
-        roles = "；".join((npc.acts_roles or {}).values())
-        lines.append(f"- {npc.name}（{npc.archetype}）：{personality}" + (f"；角色：{roles}" if roles else ""))
-    lines += ["", "## 世界关系", ""]
-    if campaign.relations:
-        for rel in campaign.relations:
-            typ = rel.type.value if hasattr(rel.type, "value") else rel.type
-            lines.append(f"- {rel.source} --[{typ}]--> {rel.target}（{rel.label}）")
-    else:
-        lines.append("（无）")
-    return "\n".join(lines)
+    return compose_campaign(module_text, premise, acts, npcs)["campaign"]
 
 
 # ---------------------------------------------------------------- 展示
@@ -307,7 +206,7 @@ def generate(
         notes_path.write_text(render_notes(campaign), encoding="utf-8")
         typer.echo(f"已生成 campaign：{out}")
         typer.echo(f"已生成备团笔记：{notes_path}")
-    except (FileNotFoundError, ValueError) as e:
+    except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 
@@ -326,7 +225,7 @@ def notes(
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         Path(out).write_text(render_notes(campaign), encoding="utf-8")
         typer.echo(f"已生成备团笔记：{out}")
-    except (FileNotFoundError, ValueError) as e:
+    except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 
@@ -346,6 +245,9 @@ def eval_command(
         world = build_from_campaign(campaign)
         det = run_deterministic(campaign, world)
         judge_obj = LLMJudge() if judge else None
+        if judge_obj is not None and not judge_obj.enabled:
+            # 对齐 generate --llm：LLM 未启用时向 stderr 打降级提示
+            typer.echo("警告：--judge 请求但 TINDALOS_LLM_ENABLED != '1'，回退确定性评测", err=True)
         judge_res = judge_obj.evaluate(campaign, world, det) if judge_obj else None
         report = eval_report(campaign, world, det, judge_res)
         if out is not None:
@@ -356,7 +258,7 @@ def eval_command(
             # stdout 纯 JSON（机器可解析）；人类摘要到 stderr
             _print_eval_report(report, to_stderr=True)
             typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
-    except (FileNotFoundError, ValueError) as e:
+    except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 
@@ -385,7 +287,7 @@ def evolve_command(
         )
         _print_loop_log(result["loop_log"])
         typer.echo(f"进化结果已写入：{out}")
-    except (FileNotFoundError, ValueError) as e:
+    except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 
@@ -421,7 +323,7 @@ def kg_command(
                 typer.echo(f"实体 {entity} 的关系（{len(rels)} 条）：")
                 for r in rels:
                     typer.echo(f"- {r['source']} --[{r['type']}]--> {r['target']}（{r.get('label', '')}）")
-    except (FileNotFoundError, ValueError) as e:
+    except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 

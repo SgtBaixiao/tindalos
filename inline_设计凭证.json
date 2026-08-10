@@ -1,0 +1,75 @@
+{
+  "credential": "inline 设计凭证",
+  "module": "inline",
+  "type": "design",
+  "granted": true,
+  "derived_from_gates": [
+    {
+      "taskId": "t8-web",
+      "gates": [
+        "g1",
+        "g2"
+      ]
+    },
+    {
+      "taskId": "t10-refactor",
+      "gates": [
+        "g1",
+        "g2"
+      ]
+    },
+    {
+      "taskId": "t9-llm",
+      "gates": [
+        "g1",
+        "g2"
+      ]
+    },
+    {
+      "taskId": "__arch__:inline",
+      "gates": [
+        "g2arch"
+      ]
+    }
+  ],
+  "gate_refs": [
+    {
+      "gate": "g1",
+      "taskId": "t8-web",
+      "status": "pass"
+    },
+    {
+      "gate": "g2",
+      "taskId": "t8-web",
+      "status": "pass"
+    },
+    {
+      "gate": "g1",
+      "taskId": "t10-refactor",
+      "status": "pass"
+    },
+    {
+      "gate": "g2",
+      "taskId": "t10-refactor",
+      "status": "pass"
+    },
+    {
+      "gate": "g1",
+      "taskId": "t9-llm",
+      "status": "pass"
+    },
+    {
+      "gate": "g2",
+      "taskId": "t9-llm",
+      "status": "pass"
+    },
+    {
+      "gate": "g2arch",
+      "taskId": "__arch__:inline",
+      "status": "pass"
+    }
+  ],
+  "plan_ticket": "inline",
+  "generatedAt": "2026-08-10T06:29:27.182Z",
+  "note": "本凭证由 gateLog 派生（hasCredential），非手工签发；过期判定以 gateLog 为准。"
+}

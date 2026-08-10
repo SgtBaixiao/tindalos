@@ -1,0 +1,5 @@
+# 前端构建上下文（context=frontend/ 时生效）——排除宿主依赖与产物
+node_modules/
+dist/
+.git/
+*.log

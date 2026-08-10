@@ -1,0 +1,243 @@
+/* ============================================================
+ * nodes.css —— 五类节点卡片（§2.3 组件规范）
+ * 视觉区分策略 = 顶条色 + 边框形态 + 图标；整卡保持纸白统一
+ * 全部由 --t-* 令牌驱动
+ * ============================================================ */
+
+.tn-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 64px;
+  padding: 8px 12px 10px;
+  background-color: var(--t-paper-deep);
+  background-image: var(--t-paper-texture);
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  box-shadow: var(--t-shadow-sm);
+  font-family: var(--t-font-body);
+  color: var(--t-ink);
+  cursor: pointer;
+}
+
+/* 悬停轻微上移 2px（house-style .lift 同款） */
+.tn-node:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--t-shadow-md);
+}
+
+/* 选中态 = 橙 2px 边框 + 抬升 */
+.tn-node.is-selected {
+  box-shadow: 0 0 0 2px var(--t-orange), var(--t-shadow-md);
+}
+
+.tn-node__bar {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 5px;
+  border-radius: 0 0 3px 3px;
+  background-color: var(--t-ink-faint);
+}
+
+.tn-node__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tn-node__title {
+  font-family: var(--t-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tn-node__roman {
+  font-family: var(--t-font-display);
+  font-size: 10px;
+  color: var(--t-rule-red);
+  letter-spacing: 0.18em;
+}
+
+.tn-node__meta {
+  font-size: 11px;
+  color: var(--t-ink-soft);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tn-node__conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* --- 幕 Act：红粗顶条，宽卡 --- */
+.tn-node--act {
+  width: 280px;
+  padding-top: 14px;
+  border-top: 3px solid var(--t-rule-red);
+}
+.tn-node--act .tn-node__bar {
+  display: none;
+}
+
+/* --- 场景 Scene：橙顶条，标准矩形 --- */
+.tn-node--scene {
+  width: 230px;
+  padding-top: 14px;
+  border-top: 3px solid var(--t-orange);
+}
+.tn-node--scene .tn-node__bar {
+  display: none;
+}
+
+/* --- 事件 Event：铜锈绿顶条 + 虚线边框（=可触发/条件） --- */
+.tn-node--event {
+  width: 210px;
+  padding-top: 14px;
+  border-top: 3px solid var(--t-verdigris);
+  border-style: dashed;
+  border-left-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+}
+.tn-node--event .tn-node__bar {
+  display: none;
+}
+
+/* --- NPC：墨蓝胶囊（区别于剧情节点矩形），含头像圈 --- */
+.tn-node--npc {
+  width: 200px;
+  min-height: 56px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--t-inkblue);
+  background-color: var(--t-paper-deep);
+  padding: 8px 16px 8px 10px;
+}
+
+.tn-node__avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--t-inkblue);
+  color: var(--t-paper);
+  font-family: var(--t-font-display);
+  font-size: 14px;
+  border: 1px solid var(--t-line);
+}
+
+/* --- 线索 Clue：墨棕顶条 + 旧纸底（典籍感） --- */
+.tn-node--clue {
+  width: 210px;
+  padding-top: 14px;
+  border-top: 3px solid var(--t-sepia-ink);
+  background-color: var(--t-oldpaper);
+}
+.tn-node--clue .tn-node__bar {
+  display: none;
+}
+
+/* --- 连接把手（对齐 --xy-* 令牌） --- */
+.tn-handle {
+  width: 9px !important;
+  height: 9px !important;
+  background-color: var(--t-orange-deep) !important;
+  border: 1.5px solid var(--t-paper) !important;
+}
+
+/* --- 徽章 / 小片 --- */
+.tn-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 1px 7px;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  border-radius: 999px;
+  border: 1px solid var(--t-line);
+  color: var(--t-ink-soft);
+  background-color: var(--t-paper);
+}
+
+.tn-badge--done {
+  color: var(--t-verdigris-deep);
+  border-color: var(--t-verdigris);
+}
+.tn-badge--待写 {
+  color: var(--t-ink-faint);
+}
+.tn-badge--生成中 {
+  color: var(--t-orange);
+  border-color: var(--t-orange);
+}
+.tn-badge--kind {
+  color: var(--t-verdigris-deep);
+  border-color: var(--t-verdigris);
+  font-family: var(--t-font-mono);
+}
+.tn-badge--clue {
+  color: var(--t-sepia-ink);
+  border-color: var(--t-sepia-ink);
+  font-family: var(--t-font-mono);
+}
+.tn-badge--type {
+  text-transform: uppercase;
+  font-family: var(--t-font-mono);
+  letter-spacing: 0.08em;
+}
+.tn-badge--act {
+  color: var(--t-rule-red);
+  border-color: var(--t-rule-red);
+}
+.tn-badge--scene {
+  color: var(--t-orange);
+  border-color: var(--t-orange);
+}
+.tn-badge--event {
+  color: var(--t-verdigris-deep);
+  border-color: var(--t-verdigris);
+}
+.tn-badge--npc {
+  color: var(--t-inkblue);
+  border-color: var(--t-inkblue);
+}
+.tn-badge--clue {
+  color: var(--t-sepia-ink);
+  border-color: var(--t-sepia-ink);
+}
+
+.tn-chip {
+  display: inline-flex;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-family: var(--t-font-mono);
+  border-radius: 999px;
+  background-color: var(--t-parchment);
+  color: var(--t-sepia-ink);
+  border: 1px solid var(--t-line);
+}
+.tn-chip--verdigris {
+  background-color: transparent;
+  color: var(--t-verdigris-deep);
+  border-color: var(--t-verdigris);
+}

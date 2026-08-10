@@ -1,0 +1,13 @@
+# 仓库级 docker 构建上下文排除（.sandbox/Dockerfile 与 .sandbox/web.Dockerfile 共用根上下文）
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.git/
+.harness/
+artifacts/
+data/
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv/

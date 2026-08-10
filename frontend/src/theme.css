@@ -1,0 +1,160 @@
+/* ============================================================
+ * Tindalos theme.css —— 暖色极简 × 克苏鲁克制氛围
+ * 基座：house-style（米白 + 橙 + 红分割线）；克苏鲁扩展：铜锈绿 + 墨蓝 + 旧纸
+ * 对应 tindalos-ui-design.md §2.1（--t-* 令牌）/ §3.2（--xy-* 变量）/ §0.4（暖墨深色板）
+ * ============================================================ */
+
+:root {
+  /* --- 继承 house-style（基座，不改值） --- */
+  --t-paper: #faf6ef;          /* 米白底 */
+  --t-paper-deep: #f3ede1;     /* 卡片/交替区 */
+  --t-ink: #2b2620;            /* 暖黑正文 */
+  --t-ink-soft: #5c5345;
+  --t-ink-faint: #8a7f6d;
+  --t-orange: #e8620c;         /* 主强调 */
+  --t-orange-deep: #c2410c;
+  --t-rule-red: #d64545;       /* 分割线/戏剧色 */
+  --t-line: #e5dcc8;
+
+  /* --- 克苏鲁扩展（新） --- */
+  --t-oldpaper: #ede0c2;       /* 泛黄旧纸（典籍卡/引用底） */
+  --t-parchment: #e4d3ae;      /* 羊皮纸深一档 */
+  --t-verdigris: #6b7a55;      /* 铜锈绿（信息/环境/NPC 关联） */
+  --t-verdigris-deep: #54603f;
+  --t-inkblue: #3e4a5a;        /* 墨蓝（链接/暗色典籍文字） */
+  --t-sepia-ink: #4a3b28;      /* 墨棕（典籍正文/打字机片段） */
+
+  /* --- 阴影（暖黑着色，非冷灰） --- */
+  --t-shadow-sm: 0 1px 3px rgba(43, 38, 32, 0.08);
+  --t-shadow-md: 0 4px 14px rgba(43, 38, 32, 0.12);
+  --t-shadow-lg: 0 8px 28px rgba(43, 38, 32, 0.18);
+
+  /* --- 字体 --- */
+  --t-font-display: 'ITC Avant Garde Gothic', 'Century Gothic', 'Poppins', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --t-font-body: Inter, 'MiSans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --t-font-mono: 'Courier Prime', 'IBM Plex Mono', ui-monospace, Consolas, 'Courier New', monospace;
+
+  /* --- 纸纹噪点 data-uri（house-style feTurbulence 实现，低 alpha） --- */
+  --t-paper-texture: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  --t-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+/* --- 暖墨深色板（Tindalos 个性决策：深棕书房夜灯感，非 Kimi 蓝黑） --- */
+[data-theme='dark'] {
+  --t-paper: #1e1a15;
+  --t-paper-deep: #27211a;
+  --t-ink: #ede4d4;
+  --t-ink-soft: #b7a98f;
+  --t-ink-faint: #7e725c;
+  --t-orange: #ff8a3d;
+  --t-orange-deep: #ffa45c;
+  --t-rule-red: #e86a5c;
+  --t-line: #352d22;
+  --t-oldpaper: #2a241b;
+  --t-parchment: #322a1f;
+  --t-verdigris: #8fa377;
+  --t-verdigris-deep: #a8b98c;
+  --t-inkblue: #8ca0bc;
+  --t-sepia-ink: #d8c3a0;
+  --t-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --t-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --t-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+/* ============================================================
+ * 基础
+ * ============================================================ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--t-paper);
+  color: var(--t-ink);
+  font-family: var(--t-font-body);
+  transition: background-color 0.2s var(--t-ease), color 0.2s var(--t-ease);
+}
+
+/* ============================================================
+ * 应用骨架
+ * ============================================================ */
+.tn-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tn-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 画布纸纹（低 alpha 噪点） */
+.tn-canvas .react-flow {
+  background-color: var(--t-paper);
+}
+
+/* ============================================================
+ * React Flow 主题接管（§3.2 --xy-* 变量，reactflow.dev 已验证默认值）
+ * ============================================================ */
+.react-flow {
+  --xy-node-background-color-default: var(--t-paper-deep);
+  --xy-node-border-default: 1px solid var(--t-line);
+  --xy-node-boxshadow-hover-default: var(--t-shadow-sm);
+  --xy-node-boxshadow-selected-default: 0 0 0 2px var(--t-orange), var(--t-shadow-md);
+  --xy-edge-stroke-default: var(--t-ink-faint);
+  --xy-edge-stroke-selected-default: var(--t-orange);
+  --xy-connectionline-stroke-default: var(--t-orange);
+  --xy-handle-background-color-default: var(--t-orange-deep);
+  --xy-handle-border-color-default: var(--t-paper);
+  --xy-selection-background-color-default: rgba(232, 98, 12, 0.08);
+  --xy-selection-border-default: 1px dotted rgba(232, 98, 12, 0.8);
+  --xy-minimap-background-color-default: var(--t-oldpaper);
+  --xy-background-pattern-dots-color-default: rgba(43, 38, 20, 0.14);
+  --xy-controls-button-background-color-default: var(--t-paper-deep);
+  --xy-controls-button-background-color-hover-default: var(--t-oldpaper);
+  --xy-controls-button-border-color-default: var(--t-line);
+  --xy-controls-button-color-default: var(--t-ink);
+  --xy-minimap-mask-background-color-default: rgba(43, 38, 32, 0.06);
+  --xy-minimap-node-stroke-color-default: transparent;
+  --xy-attribution-background-color-default: transparent;
+  --xy-attribution-color-default: var(--t-ink-faint);
+  color: var(--t-ink);
+  font-family: var(--t-font-body);
+}
+
+/* 深色下 dot 网格降对比、attribution 隐藏弱化 */
+.react-flow.dark {
+  --xy-background-pattern-dots-color-default: rgba(237, 228, 212, 0.1);
+  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================
+ * 动效铁律（house-style）：≤300ms / 统一缓动 / reduced-motion 直接可见
+ * ============================================================ */
+.tn-node,
+.tn-drawer,
+.tn-progress,
+.tn-btn {
+  transition: box-shadow 0.2s var(--t-ease), transform 0.2s var(--t-ease), background-color 0.2s var(--t-ease), border-color 0.2s var(--t-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

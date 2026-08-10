@@ -100,8 +100,11 @@ def campaign_id_for(module_text: str) -> str:
     return "campaign-" + hashlib.sha1((module_text or "").strip().encode("utf-8")).hexdigest()[:8]
 
 
-def _extract_premise(module_text: str) -> str:
-    """从模组文本提取前提：优先「前提：」行，其次首段。"""
+def extract_premise(module_text: str) -> str:
+    """从模组文本提取前提：优先「前提：」行，其次首段。
+
+    公共入口（t10 去重复）：pipeline 与 cli 共用。
+    """
     lines = [l.strip() for l in (module_text or "").splitlines() if l.strip()]
     for line in lines:
         low = line.lower()
@@ -113,7 +116,8 @@ def _extract_premise(module_text: str) -> str:
     return first[:200] if first else "无名模组"
 
 
-def _title_from_text(module_text: str) -> str:
+def title_from_text(module_text: str) -> str:
+    """从模组文本派生标题（公共入口：pipeline 与 cli 共用）。"""
     lines = [l.strip() for l in (module_text or "").splitlines() if l.strip()]
     for line in lines:
         cleaned = line.lstrip("#").strip()
@@ -204,7 +208,7 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
     def kp_parse(state: PipelineState) -> dict:
         module_text = (state.get("module_text") or "").strip()
         return {
-            "premise": _extract_premise(module_text),
+            "premise": extract_premise(module_text),
             "campaign_id": campaign_id_for(module_text),
         }
 
@@ -214,7 +218,7 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
         缺省 n_acts=2、n_npcs=3（模块常量 _DEFAULT_N_ACTS/_DEFAULT_N_NPCS），
         可经环境变量 TINDALOS_N_ACTS / TINDALOS_N_NPCS 覆盖。
         """
-        premise = state.get("premise") or _extract_premise(state.get("module_text", ""))
+        premise = state.get("premise") or extract_premise(state.get("module_text", ""))
         n_acts = max(1, int(os.environ.get("TINDALOS_N_ACTS", str(_DEFAULT_N_ACTS))))
         n_npcs = max(1, int(os.environ.get("TINDALOS_N_NPCS", str(_DEFAULT_N_NPCS))))
         npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
@@ -330,78 +334,33 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
         writer({"progress": f"写作第 {idx} 幕"})
         return {"acts": [act], "progress": [f"写作第 {idx} 幕"]}
 
-    def _build_clues_and_relations(acts: list[dict], npcs: dict[str, dict]) -> tuple[list[dict], list[dict]]:
-        clues: list[dict] = []
-        relations: list[dict] = []
-        for i, act in enumerate(acts):
-            scenes = act.get("scenes", [])
-            if not scenes:
-                continue
-            outcome = scenes[0]["events"][-1]
-            clue_id = f"clue-{act['id']}"
-            npc_id = (act.get("npc_ids") or list(npcs))[0]
-            clues.append(
-                {
-                    "id": clue_id,
-                    "name": f"{act.get('title', act['id'])}的关键线索",
-                    "description": "指向本幕真相的关键线索。",
-                    "linked_npc_ids": [npc_id],
-                    "linked_event_ids": [outcome["id"]],
-                }
-            )
-            relations.append(
-                {
-                    "source": npc_id, "target": clue_id, "type": "指向",
-                    "label": "指向线索", "valid_from": "1900-01-01",
-                }
-            )
-            if i + 1 < len(acts):
-                nxt_id = (acts[i + 1].get("npc_ids") or list(npcs))[0]
-                relations.append(
-                    {
-                        "source": npc_id, "target": nxt_id, "type": "认识",
-                        "label": "互相认识", "valid_from": "1900-01-01",
-                    }
-                )
-        return clues, relations
-
     def compose(state: PipelineState) -> dict:
-        """汇总：校验装配 models.Campaign + 备团笔记 markdown + store 事实写入。"""
+        """汇总：公共 compose_campaign 装配 Campaign + store 事实写入（t10 去重复）。"""
         writer = get_stream_writer()
         writer({"progress": "校对付印"})
-        acts = sorted(_dedupe_acts(state.get("acts", [])), key=_act_sort_key)
-        npcs = dict(state.get("npcs", {}))
-        premise = state.get("premise", "")
-        module_text = state.get("module_text", "")
-        campaign_id = state.get("campaign_id") or campaign_id_for(module_text)
-        clues, relations = _build_clues_and_relations(acts, npcs)
-        campaign = Campaign(
-            id=campaign_id,
-            title=f"模组《{_title_from_text(module_text)}》",
-            premise=premise,
-            acts=[Act(**a) for a in acts],
-            npcs={nid: NPC(**n) for nid, n in npcs.items()},
-            clues=[Clue(**c) for c in clues],
-            relations=[WorldRelation(**r) for r in relations],
+        assembled = compose_campaign(
+            state.get("module_text", ""),
+            state.get("premise", ""),
+            state.get("acts", []),
+            dict(state.get("npcs", {})),
         )
-        world = build_from_campaign(campaign)
-        notes_md = _render_notes(campaign)
+        campaign = assembled["campaign"]
         store = get_store()
         if store is not None:
             store.put(
-                ("campaigns", campaign_id, "facts"),
+                ("campaigns", campaign.id, "facts"),
                 "relations",
                 {"items": [r.model_dump(mode="json") for r in campaign.relations]},
             )
             store.put(
-                ("campaigns", campaign_id, "facts"),
+                ("campaigns", campaign.id, "facts"),
                 "campaign",
                 campaign.model_dump(mode="json"),
             )
         return {
             "campaign": campaign,
-            "notes_md": notes_md,
-            "world": world.to_json(),
+            "notes_md": assembled["notes_md"],
+            "world": assembled["world"],
             "progress": ["校对付印"],
         }
 
@@ -418,29 +377,105 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
     }
 
 
-def _render_notes(campaign: Campaign) -> str:
-    """备团笔记 markdown：前提 / 幕（场景+事件）/ NPC 一览 / 关系。"""
+def _build_clues_and_relations(acts: list[dict], npcs: dict[str, dict]) -> tuple[list[dict], list[dict]]:
+    """装配线索与 KG 关系：每幕一条线索 + 指向边 + 幕间认识边。"""
+    clues: list[dict] = []
+    relations: list[dict] = []
+    for i, act in enumerate(acts):
+        scenes = act.get("scenes", [])
+        if not scenes:
+            continue
+        outcome = scenes[0]["events"][-1]
+        clue_id = f"clue-{act['id']}"
+        npc_id = (act.get("npc_ids") or list(npcs))[0]
+        clues.append(
+            {
+                "id": clue_id,
+                "name": f"{act.get('title', act['id'])}的关键线索",
+                "description": "指向本幕真相的关键线索。",
+                "linked_npc_ids": [npc_id],
+                "linked_event_ids": [outcome["id"]],
+            }
+        )
+        relations.append(
+            {
+                "source": npc_id, "target": clue_id, "type": "指向",
+                "label": "指向线索", "valid_from": "1900-01-01",
+            }
+        )
+        if i + 1 < len(acts):
+            nxt_id = (acts[i + 1].get("npc_ids") or list(npcs))[0]
+            relations.append(
+                {
+                    "source": npc_id, "target": nxt_id, "type": "认识",
+                    "label": "互相认识", "valid_from": "1900-01-01",
+                }
+            )
+    return clues, relations
+
+
+def compose_campaign(module_text: str, premise: str, acts: list[dict], npcs: dict[str, dict]) -> dict:
+    """纯装配：acts/npcs 草案 → Campaign 模型 + 线索/关系 + 世界图 + 备团笔记。
+
+    公共入口（t10 去重复）：pipeline.compose 节点与 cli.generate 共用。
+    - 对 acts 去重（同 id 保留首个）并按幕序号排序；
+    - 每幕一条线索 + 指向边 + 幕间认识边（_build_clues_and_relations）；
+    - 返回 {"campaign": Campaign, "clues": [...], "relations": [...],
+             "world": dict, "notes_md": str}。
+    """
+    acts = sorted(_dedupe_acts(list(acts)), key=_act_sort_key)
+    npcs = dict(npcs)
+    clues, relations = _build_clues_and_relations(acts, npcs)
+    campaign = Campaign(
+        id=campaign_id_for(module_text),
+        title=f"模组《{title_from_text(module_text)}》",
+        premise=premise,
+        acts=[Act(**a) for a in acts],
+        npcs={nid: NPC(**n) for nid, n in npcs.items()},
+        clues=[Clue(**c) for c in clues],
+        relations=[WorldRelation(**r) for r in relations],
+    )
+    world = build_from_campaign(campaign)
+    return {
+        "campaign": campaign,
+        "clues": clues,
+        "relations": relations,
+        "world": world.to_json(),
+        "notes_md": render_notes(campaign),
+    }
+
+
+def render_notes(campaign: Campaign) -> str:
+    """备团笔记 markdown：前提 / 幕（场景+事件）/ NPC 一览 / 世界关系。
+
+    宽松容错分支（t10 去重复）：scene.setting / npc.personality / npc.acts_roles
+    缺失或为空、relation.type 非枚举时仍可渲染（供 cli.notes 输入容错路径复用）。
+    """
     lines = [f"# 备团笔记：{campaign.title}", "", f"**模组 id**：`{campaign.id}`", ""]
     lines += ["## 前提", "", campaign.premise or "（无）", ""]
     lines += ["## 幕"]
     for act in campaign.acts:
         lines += [f"### {act.title}", "", act.summary or "", ""]
         for scene in act.scenes:
-            setting = f"{scene.setting.get('time', '')}·{scene.setting.get('place', '')}"
-            lines += [f"#### {scene.title}（{setting}）", ""]
+            setting = scene.setting or {}
+            lines += [
+                f"#### {scene.title}（{setting.get('time', '')}·{setting.get('place', '')}）", ""
+            ]
             for ev in scene.events:
                 lines.append(f"- **{ev.title}**（{ev.kind}）：{ev.description}")
             lines.append("")
     lines += ["## NPC 一览", ""]
-    for npc_id, npc in campaign.npcs.items():
+    for npc in campaign.npcs.values():
+        personality = "、".join(npc.personality or []) or "（无特质）"
+        roles = "；".join((npc.acts_roles or {}).values())
         lines.append(
-            f"- {npc.name}（{npc.archetype}）：{'、'.join(npc.personality) or '（无特质）'}"
-            f"{'；角色：' + '；'.join(npc.acts_roles.values()) if npc.acts_roles else ''}"
+            f"- {npc.name}（{npc.archetype}）：{personality}" + (f"；角色：{roles}" if roles else "")
         )
     lines += ["", "## 世界关系", ""]
     if campaign.relations:
         for rel in campaign.relations:
-            lines.append(f"- {rel.source} --[{rel.type.value}]--> {rel.target}（{rel.label}）")
+            typ = rel.type.value if hasattr(rel.type, "value") else rel.type
+            lines.append(f"- {rel.source} --[{typ}]--> {rel.target}（{rel.label}）")
     else:
         lines.append("（无）")
     return "\n".join(lines)
@@ -545,6 +580,10 @@ __all__ = [
     "PipelineState",
     "kg_query",
     "campaign_id_for",
+    "extract_premise",
+    "title_from_text",
+    "compose_campaign",
+    "render_notes",
     "build_pipeline",
     "run_pipeline",
 ]
