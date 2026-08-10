@@ -368,11 +368,22 @@ def test_disconnect_stops_generation(monkeypatch):
 # ---------------------------------------------------------------- CLI / 零新依赖
 
 
+def _strip_ansi(s: str) -> str:
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+
+
 def test_serve_subcommand_help():
+    # 参数级断言（终端/rich 版本无关，CI 渲染差异不破坏测试）：
+    cmd = app.typer_instance.get_command(None, "serve")
+    assert cmd is not None, "serve 子命令未注册"
+    opts = {n for p in cmd.get_params(None) for n in p.opts}
+    assert "--host" in opts and "--port" in opts
+    # 帮助文本出口码 + 含默认端口（ANSI 剥离后，容 CI rich 差异）
     r = runner.invoke(app, ["serve", "--help"])
     assert r.exit_code == 0, r.stdout
-    assert "--host" in r.stdout and "--port" in r.stdout
-    assert "8347" in r.stdout
+    assert "8347" in _strip_ansi(r.stdout)
 
 
 def test_serve_subcommand_registered_in_help():
