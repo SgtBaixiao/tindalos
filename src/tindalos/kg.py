@@ -35,8 +35,8 @@ def _norm_type(t: Any) -> str:
     raise ValueError(f"未知关系类型: {t!r}；合法值: {sorted(_LABELS)}")
 
 
-def _parse_time(v: Any):
-    """解析时间为可比较对象：ISO-8601（日期或 datetime）→ 归一化 UTC datetime；否则原样字符串。"""
+def parse_time(v: Any):
+    """解析时间为可比较对象（公共 API）：ISO-8601（日期或 datetime）→ 归一化 UTC datetime；否则原样字符串。"""
     if v is None or isinstance(v, datetime):
         return v
     s = str(v)
@@ -51,21 +51,33 @@ def _parse_time(v: Any):
     return dt
 
 
-def _key(v: Any, *, upper: bool = False) -> tuple[int, Any]:
-    """可比较键 (桶, 值)：None 按无限处理（upper=True 为 +inf，否则 -inf）；datetime 桶在字符串桶之前。"""
+def time_key(v: Any, *, upper: bool = False) -> tuple[int, Any]:
+    """可比较键（公共 API）：(桶, 值)——None 按无限处理（upper=True 为 +inf，否则 -inf）；datetime 桶在字符串桶之前。"""
     if v is None:
         return (2, None) if upper else (-2, None)
-    parsed = _parse_time(v)
+    parsed = parse_time(v)
     if isinstance(parsed, datetime):
         return (0, parsed)
     return (1, parsed)
 
 
-def _window_overlaps(w1: tuple[Any, Any], w2: tuple[Any, Any]) -> bool:
-    """半开区间 [from, to) 相交：f1 < t2 且 f2 < t1（None 端点视为无限）。"""
+def _degenerate_window(f: Any, t: Any) -> bool:
+    """退化窗（空窗/倒置窗）：半开区间 [f, t) 为空——f >= t（None 端点视为无限，永不退化）。"""
+    if f is None or t is None:
+        return False
+    return not (time_key(f) < time_key(t, upper=True))
+
+
+def window_overlaps(w1: tuple[Any, Any], w2: tuple[Any, Any]) -> bool:
+    """半开区间 [from, to) 相交（公共 API）：f1 < t2 且 f2 < t1（None 端点视为无限）。
+
+    退化窗（valid_from >= valid_to，含空窗与倒置窗）恒不相交——交集为空。
+    """
     f1, t1 = w1
     f2, t2 = w2
-    return _key(f1) < _key(t2, upper=True) and _key(f2) < _key(t1, upper=True)
+    if _degenerate_window(f1, t1) or _degenerate_window(f2, t2):
+        return False
+    return time_key(f1) < time_key(t2, upper=True) and time_key(f2) < time_key(t1, upper=True)
 
 
 class WorldGraph:
@@ -131,11 +143,11 @@ class WorldGraph:
         """as_of 时刻为真的关系（valid_from <= as_of < valid_to）；缺省 as_of = 当前时间。"""
         if as_of is None:
             as_of = datetime.now(timezone.utc)
-        k_asof = _key(as_of)
+        k_asof = time_key(as_of)
         out = [
             {"source": u, "target": v, **d}
             for u, v, d in self._g.edges(data=True)
-            if _key(d.get("valid_from")) <= k_asof < _key(d.get("valid_to"), upper=True)
+            if time_key(d.get("valid_from")) <= k_asof < time_key(d.get("valid_to"), upper=True)
         ]
         out.sort(key=_edge_sort_key)
         return out
@@ -203,7 +215,7 @@ class WorldGraph:
             if (
                 d.get("valid_from") is not None
                 and d.get("valid_to") is not None
-                and _key(d["valid_to"], upper=True) < _key(d["valid_from"])
+                and time_key(d["valid_to"], upper=True) < time_key(d["valid_from"])
             ):
                 problems.append(
                     f"关系边 {u}→{v}({typ}) 有效窗倒置: "
@@ -219,7 +231,7 @@ class WorldGraph:
                     w2 = (items[j].get("valid_from"), items[j].get("valid_to"))
                     if w1 == w2:
                         continue  # 同窗重复由 add_relation 去重拦截，双保险
-                    if _window_overlaps(w1, w2):
+                    if window_overlaps(w1, w2):
                         problems.append(f"关系 {u}→{v}({typ}) 有效窗重叠: {w1} vs {w2}")
         return problems
 
