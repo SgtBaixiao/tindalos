@@ -66,6 +66,7 @@ from tindalos.models import (
     Scene,
     WorldRelation,
 )
+from tindalos.regenerate import regenerate_scene_events as _regenerate_scene
 
 # 场景标题中的结构性提示词：含这些词的标题不作为 NPC 名字提取候选
 _STRUCTURAL_HINTS = ("幕", "场景", "第", "场", "act", "scene", "sc-")
@@ -198,34 +199,6 @@ def _register_npc(campaign: Campaign, nid: str, scene_id: str, applied: list[str
         acts_roles={},
     )
     applied.append(f"注册悬空 NPC {nid}（名「{name}」）")
-
-
-def _regenerate_scene(
-    gen: Any, campaign: Campaign, act: Any, scene: Any, used_ids: set[str]
-) -> int:
-    """用生成器局部重产空场景的事件序列。
-
-    id 递增后缀重编号（base 与 base-r 均被占用时继续 -r1/-r2，绝不无限循环）；
-    全部事件构造成功后才提交新 id（失败不留幻影 id，保持跨轮确定性）。
-    """
-    draft = gen.generate_scene(act.title, campaign.premise, list(scene.npc_ids))
-    events: list[Event] = []
-    new_ids: set[str] = set()
-    for j, ev in enumerate(draft.get("events", []) or []):
-        data = dict(ev)
-        base = f"{scene.id}-ev-{j + 1}"
-        eid, counter = base, 0
-        while eid in used_ids:
-            counter += 1
-            eid = f"{base}-r{counter}"  # 递增后缀：占用再多也不死循环
-        new_ids.add(eid)
-        data["id"] = eid
-        events.append(Event(**data))
-    for j, ev in enumerate(events):
-        ev.next_event_ids = [events[k].id for k in range(j + 1, len(events))]
-    scene.events = events
-    used_ids.update(new_ids)
-    return len(events)
 
 
 def _fix_empty_scenes(campaign: Campaign, gen: Any, applied: list[str], failed: list[str]) -> None:

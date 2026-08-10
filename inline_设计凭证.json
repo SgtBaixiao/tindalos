@@ -5,21 +5,14 @@
   "granted": true,
   "derived_from_gates": [
     {
-      "taskId": "t8-web",
+      "taskId": "t11-serve",
       "gates": [
         "g1",
         "g2"
       ]
     },
     {
-      "taskId": "t10-refactor",
-      "gates": [
-        "g1",
-        "g2"
-      ]
-    },
-    {
-      "taskId": "t9-llm",
+      "taskId": "t12-regenerate",
       "gates": [
         "g1",
         "g2"
@@ -35,32 +28,22 @@
   "gate_refs": [
     {
       "gate": "g1",
-      "taskId": "t8-web",
+      "taskId": "t11-serve",
       "status": "pass"
     },
     {
       "gate": "g2",
-      "taskId": "t8-web",
+      "taskId": "t11-serve",
       "status": "pass"
     },
     {
       "gate": "g1",
-      "taskId": "t10-refactor",
+      "taskId": "t12-regenerate",
       "status": "pass"
     },
     {
       "gate": "g2",
-      "taskId": "t10-refactor",
-      "status": "pass"
-    },
-    {
-      "gate": "g1",
-      "taskId": "t9-llm",
-      "status": "pass"
-    },
-    {
-      "gate": "g2",
-      "taskId": "t9-llm",
+      "taskId": "t12-regenerate",
       "status": "pass"
     },
     {
@@ -70,6 +53,6 @@
     }
   ],
   "plan_ticket": "inline",
-  "generatedAt": "2026-08-10T06:29:27.182Z",
+  "generatedAt": "2026-08-10T07:53:41.825Z",
   "note": "本凭证由 gateLog 派生（hasCredential），非手工签发；过期判定以 gateLog 为准。"
 }

@@ -1,14 +1,17 @@
-"""Typer CLI（task t7-cli）：`tindalos` 五命令族。
+"""Typer CLI（task t7-cli）：`tindalos` 七命令族。
 
 入口 `app` 经 pyproject `[project.scripts] tindalos = "tindalos.cli:app"` 暴露。
 
-五命令：
+七命令：
   ① generate  模组文本（.md/.json）→ campaign JSON + 同目录 notes.md 备团笔记
               （默认 DeterministicGenerator；`--llm` 且 settings.llm_enabled 时用 OllamaGenerator）
   ② notes     campaign JSON → 重生成备团笔记 markdown
   ③ eval      campaign JSON → 4 维分数表 + 归因 + 建议（JSON 到 stdout 或 --out）
   ④ evolve    campaign JSON → 自进化循环（rounds 轮 eval→修复→复评，打印 loop_log）
   ⑤ kg        campaign JSON → 实体关系查询 / 多跳路径（--entity [--path-to]）
+  ⑥ serve     HTTP API 服务：POST /api/generate（SSE）· GET /api/campaigns/<id> · POST /api/regenerate
+  ⑦ regenerate campaign JSON → 单节点重生成（scene/event/npc/clue），其余保持不动
+              （--node 必填；校验失败回滚原样；--llm 且 settings.llm_enabled 时用 OllamaGenerator）
 
 契约：成功退出码 0；输入文件缺失 / JSON 解析失败 / 实体未知 → 非 0 退出码，错误打到 stderr。
 全程确定性（零网络零 LLM）：--llm/--judge 仅在 TINDALOS_LLM_ENABLED=1 时生效，否则回退。
@@ -324,6 +327,52 @@ def kg_command(
                 for r in rels:
                     typer.echo(f"- {r['source']} --[{r['type']}]--> {r['target']}（{r.get('label', '')}）")
     except (OSError, ValueError) as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
+# ---------------------------------------------------------------- ⑦ regenerate
+
+
+@app.command(name="regenerate")
+def regenerate_command(
+    campaign_file: Path = typer.Argument(..., help="campaign JSON 路径"),
+    node: str = typer.Option(..., "--node", "-n", help="要重生成的节点 id（scene-*/event-*/npc-*/clue-*）"),
+    llm: bool = typer.Option(False, "--llm", help="使用 LLM 生成（需 TINDALOS_LLM_ENABLED=1）"),
+    out: Path = typer.Option("campaign.regenerated.json", "--out", "-o", help="重生成结果 JSON 输出路径"),
+) -> None:
+    """⑦ 重生成节点：scene/event/npc/clue 单节点重产，其余保持不动；校验失败回滚原样。"""
+    try:
+        from tindalos.regenerate import regenerate_node
+
+        raw = _load_campaign_json(campaign_file)
+        generator = _resolve_generator(llm)
+        campaign, applied = regenerate_node(raw, node, generator)
+        if not applied:
+            typer.echo("警告：重生成校验失败，已回滚为原样（输出即输入副本）", err=True)
+        _write_json(campaign.model_dump(mode="json"), out)
+        for a in applied:
+            typer.echo(f"[应用] {a}")
+        typer.echo(f"重生成结果已写入：{out}")
+    except (OSError, ValueError) as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
+# ---------------------------------------------------------------- ⑥ serve
+
+
+@app.command(name="serve")
+def serve_command(
+    host: str = typer.Option("127.0.0.1", "--host", help="HTTP 监听地址（默认 127.0.0.1）"),
+    port: int = typer.Option(8347, "--port", "-p", help="HTTP 监听端口（默认 8347）"),
+) -> None:
+    """⑥ HTTP API 服务：SSE 流式生成 + campaign 内存缓存 + 节点重生成（前端依赖契约）。"""
+    try:
+        from tindalos.serve import serve as serve_api
+
+        serve_api(host=host, port=port)
+    except OSError as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
 
