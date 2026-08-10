@@ -369,7 +369,9 @@ class OllamaGenerator:
                 # 裸数字 id（如 1）会与 npc/scene id 跨实体冲突 → 加类型前缀
                 it["id"] = f"act-{str(it['id']).strip()}"
             else:
-                it["id"] = str(it["id"]).strip()
+                # 规范 id 格式：LLM 可能返回 act_1 / Act1 / actOne 等任意格式，
+                # 统一为 act-{i+1} 保证 id 契约（前端/测试/引用依赖 act-N-scene-N-ev-N）
+                it["id"] = f"act-{i + 1}"
             it["title"] = title
             it["roman"] = str(it.get("roman") or _ROMANS[len(out) % len(_ROMANS)])
             it["summary"] = str(it.get("summary") or "")

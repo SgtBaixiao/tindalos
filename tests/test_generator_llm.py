@@ -421,3 +421,12 @@ class TestGenerate:
         g.generate_npcs("前提", 1)
         prompt = fake.calls[0]["json"]["messages"][0]["content"]
         assert len(g._module_context) <= 20
+
+    def test_norm_acts_canonicalizes_llm_ids(self) -> None:
+        """回归（云端 DeepSeek 实验发现）：LLM 返回 act_1/ActOne 等任意 id → 规范为 act-{n}，
+        保证前端/测试/引用的 id 契约（act-N-scene-N-ev-N）不依赖 LLM 输出。"""
+        payload = _msg('[{"id": "act_1", "title": "德罗赫达的阴影", "scene_titles": ["A"]},'
+                       '{"id": "ActTwo", "title": "蛇的回归", "scene_titles": ["B"]}]')
+        g = _make_generator(_FakeRequests(payload))
+        acts = g.generate_acts("前提", 2)
+        assert [a["id"] for a in acts] == ["act-1", "act-2"]
