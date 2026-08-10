@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tindalos"
+version = "0.1.0"
+description = "克苏鲁 TRPG 备团系统：KP 主控 → 自适应 NPC 生成 → 分幕剧本 → 备团笔记 → 剧本节点图（LangGraph 多智能体）"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.2.10",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "networkx>=3.5",
+    "pydantic>=2.12",
+    "typer>=0.15",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+# [project.scripts] 入口点：tindalos 命令由 t7-cli 实现 src/tindalos/cli.py（Typer app）；
+# 现阶段 cli.py 尚未产出，安装包时该入口会因缺模块而校验失败——属预期，待 t7 落地后启用。
+[project.scripts]
+tindalos = "tindalos.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

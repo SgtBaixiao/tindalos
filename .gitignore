@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Tindalos 运行时数据
+data/
+
+# Harness 管线状态（plan/status/事件/产物镜像）
+.harness/
+
+# 构建产物
+build/
+dist/
+*.egg-info/
+plan.json
+status.json
+.harness/
+artifacts/
