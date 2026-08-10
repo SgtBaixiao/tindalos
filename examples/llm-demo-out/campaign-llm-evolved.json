@@ -1,0 +1,374 @@
+{
+  "campaign": {
+    "id": "campaign-61403a39",
+    "title": "模组《雾港之夜》",
+    "premise": "雾港之夜",
+    "acts": [
+      {
+        "id": "act-1",
+        "title": "雾港之夜",
+        "roman": "夜",
+        "summary": "雾港，一座被迷雾笼罩的城市。夜晚降临，整个城市沉浸在一片寂静之中。",
+        "scenes": [
+          {
+            "id": "act-1-scene-1",
+            "title": "雾港之夜",
+            "setting": {
+              "time": "清晨",
+              "place": "古董店"
+            },
+            "events": [
+              {
+                "id": "act-1-scene-1-ev-1",
+                "title": "抵达现场",
+                "kind": "entry",
+                "description": "众人于清晨抵达古董店，气氛异样。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-1-scene-1-ev-2",
+                  "act-1-scene-1-ev-3"
+                ]
+              },
+              {
+                "id": "act-1-scene-1-ev-2",
+                "title": "发现线索",
+                "kind": "trigger",
+                "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-1-scene-1-ev-3"
+                ]
+              },
+              {
+                "id": "act-1-scene-1-ev-3",
+                "title": "事态升级",
+                "kind": "outcome",
+                "description": "真相浮出水面，局面失控，幕在此收束。",
+                "conditions": [],
+                "next_event_ids": []
+              }
+            ],
+            "npc_ids": [
+              "npc-1",
+              "npc-3"
+            ]
+          },
+          {
+            "id": "act-1-scene-2",
+            "title": "夜梦中的雾港",
+            "setting": {
+              "time": "傍晚",
+              "place": "雾气弥漫的小巷"
+            },
+            "events": [
+              {
+                "id": "act-1-scene-2-ev-1",
+                "title": "抵达现场",
+                "kind": "entry",
+                "description": "众人于傍晚抵达雾气弥漫的小巷，气氛异样。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-1-scene-2-ev-2",
+                  "act-1-scene-2-ev-3"
+                ]
+              },
+              {
+                "id": "act-1-scene-2-ev-2",
+                "title": "发现线索",
+                "kind": "trigger",
+                "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-1-scene-2-ev-3"
+                ]
+              },
+              {
+                "id": "act-1-scene-2-ev-3",
+                "title": "事态升级",
+                "kind": "outcome",
+                "description": "真相浮出水面，局面失控，幕在此收束。",
+                "conditions": [],
+                "next_event_ids": []
+              }
+            ],
+            "npc_ids": [
+              "npc-1",
+              "npc-3"
+            ]
+          }
+        ],
+        "npc_ids": [
+          "npc-1",
+          "npc-3"
+        ]
+      },
+      {
+        "id": "act-2",
+        "title": "凌晨曙光",
+        "roman": "黎明",
+        "summary": "清晨，太阳缓缓升起，给整个雾港注入了新的活力。",
+        "scenes": [
+          {
+            "id": "act-2-scene-1",
+            "title": "清晨的雾港",
+            "setting": {
+              "time": "深夜",
+              "place": "废弃码头"
+            },
+            "events": [
+              {
+                "id": "act-2-scene-1-ev-1",
+                "title": "抵达现场",
+                "kind": "entry",
+                "description": "众人于深夜抵达废弃码头，气氛异样。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-2-scene-1-ev-2",
+                  "act-2-scene-1-ev-3"
+                ]
+              },
+              {
+                "id": "act-2-scene-1-ev-2",
+                "title": "发现线索",
+                "kind": "trigger",
+                "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-2-scene-1-ev-3"
+                ]
+              },
+              {
+                "id": "act-2-scene-1-ev-3",
+                "title": "事态升级",
+                "kind": "outcome",
+                "description": "真相浮出水面，局面失控，幕在此收束。",
+                "conditions": [],
+                "next_event_ids": []
+              }
+            ],
+            "npc_ids": [
+              "npc-2"
+            ]
+          },
+          {
+            "id": "act-2-scene-2",
+            "title": "曙光照耀下的雾港",
+            "setting": {
+              "time": "深夜",
+              "place": "废弃码头"
+            },
+            "events": [
+              {
+                "id": "act-2-scene-2-ev-1",
+                "title": "抵达现场",
+                "kind": "entry",
+                "description": "众人于深夜抵达废弃码头，气氛异样。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-2-scene-2-ev-2",
+                  "act-2-scene-2-ev-3"
+                ]
+              },
+              {
+                "id": "act-2-scene-2-ev-2",
+                "title": "发现线索",
+                "kind": "trigger",
+                "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+                "conditions": [],
+                "next_event_ids": [
+                  "act-2-scene-2-ev-3"
+                ]
+              },
+              {
+                "id": "act-2-scene-2-ev-3",
+                "title": "事态升级",
+                "kind": "outcome",
+                "description": "真相浮出水面，局面失控，幕在此收束。",
+                "conditions": [],
+                "next_event_ids": []
+              }
+            ],
+            "npc_ids": [
+              "npc-2"
+            ]
+          }
+        ],
+        "npc_ids": [
+          "npc-2"
+        ]
+      }
+    ],
+    "npcs": {
+      "npc-1": {
+        "id": "npc-1",
+        "name": "李清照",
+        "archetype": "历史人物",
+        "personality": [
+          "文人",
+          "女性",
+          "婉约派",
+          "才子佳人"
+        ],
+        "description": "她是宋词的代表，才华横溢，生活优裕。",
+        "acts_roles": {}
+      },
+      "npc-2": {
+        "id": "npc-2",
+        "name": "孟晚舟",
+        "archetype": "历史人物",
+        "personality": [
+          "政治家",
+          "女",
+          "外交家",
+          "女性领袖"
+        ],
+        "description": "她在被加拿大政府拘留的背景下，展现了非凡的政治智慧和外交才能。",
+        "acts_roles": {}
+      },
+      "npc-3": {
+        "id": "npc-3",
+        "name": "黄文秀",
+        "archetype": "历史人物",
+        "personality": [
+          "青年",
+          "女性",
+          "革命者",
+          "前卫知识分子"
+        ],
+        "description": "她在脱贫攻坚工作中展现了惊人的组织能力与创新精神，成为全国乃至全世界的楷模。",
+        "acts_roles": {}
+      }
+    },
+    "clues": [
+      {
+        "id": "clue-act-1",
+        "name": "雾港之夜的关键线索",
+        "description": "指向本幕真相的关键线索。",
+        "linked_npc_ids": [
+          "npc-1"
+        ],
+        "linked_event_ids": [
+          "act-1-scene-1-ev-3"
+        ],
+        "found_at": null
+      },
+      {
+        "id": "clue-act-2",
+        "name": "凌晨曙光的关键线索",
+        "description": "指向本幕真相的关键线索。",
+        "linked_npc_ids": [
+          "npc-2"
+        ],
+        "linked_event_ids": [
+          "act-2-scene-1-ev-3"
+        ],
+        "found_at": null
+      }
+    ],
+    "relations": [
+      {
+        "source": "npc-1",
+        "target": "clue-act-1",
+        "type": "指向",
+        "label": "指向线索",
+        "valid_from": "1900-01-01",
+        "valid_to": null,
+        "note": null
+      },
+      {
+        "source": "npc-1",
+        "target": "npc-2",
+        "type": "认识",
+        "label": "互相认识",
+        "valid_from": "1900-01-01",
+        "valid_to": null,
+        "note": null
+      },
+      {
+        "source": "npc-2",
+        "target": "clue-act-2",
+        "type": "指向",
+        "label": "指向线索",
+        "valid_from": "1900-01-01",
+        "valid_to": null,
+        "note": null
+      }
+    ]
+  },
+  "report": {
+    "campaign_id": "campaign-61403a39",
+    "campaign_title": "模组《雾港之夜》",
+    "total": 5.0,
+    "table": {
+      "structural": {
+        "score": 5,
+        "evidence": [],
+        "suggestion": null
+      },
+      "consistency": {
+        "score": 5,
+        "evidence": [],
+        "suggestion": null
+      },
+      "depth": {
+        "score": 5,
+        "evidence": [],
+        "suggestion": null
+      },
+      "playability": {
+        "score": 5,
+        "evidence": [],
+        "suggestion": null
+      }
+    },
+    "attribution": {
+      "structure": {
+        "label": "结构问题",
+        "count": 0,
+        "items": []
+      },
+      "data": {
+        "label": "引用/数据问题",
+        "count": 0,
+        "items": []
+      },
+      "model": {
+        "label": "生成风格/质量",
+        "count": 0,
+        "items": []
+      },
+      "evaluation": {
+        "label": "评测规则本身",
+        "count": 2,
+        "items": [
+          {
+            "kind": "note",
+            "text": "LLM 裁判未参与（未提供 judge_result），全部评分来自确定性规则"
+          },
+          {
+            "kind": "note",
+            "text": "确定性检查全部通过，无失败项需要归因"
+          }
+        ]
+      }
+    },
+    "judge": "none",
+    "generated_at": "2026-08-10T07:11:12+00:00"
+  },
+  "loop_log": [
+    {
+      "round": 1,
+      "applied": [],
+      "failed": [],
+      "pending": [],
+      "score_before": 5.0,
+      "score_after": 5.0,
+      "delta": 0.0,
+      "evidence": [
+        "total 5.0 -> 5.0 (delta 0.0)"
+      ],
+      "schema_err": ""
+    }
+  ],
+  "pending": []
+}

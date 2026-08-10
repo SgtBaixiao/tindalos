@@ -5,7 +5,8 @@
   零网络零 LLM，可离线端到端测试（全程确定性：同一 premise → 同一输出）；
 - OllamaGenerator：requests 调 settings.ollama_base_url 的 /chat/completions（OpenAI 兼容），
   仅 settings.llm_enabled 时经 build_generator() 构造；generate_scene 附带 function calling
-  声明（tools），解析失败回退确定性实现。
+  声明（tools）；超时/网络/5xx/429 自动重试（TINDALOS_LLM_MAX_RETRIES），回复不可解析或
+  字段规整失败时回退 DeterministicGenerator 并发出 UserWarning（降级不阻塞管线）。
 """
 
 from __future__ import annotations
@@ -14,7 +15,11 @@ import hashlib
 import json
 import random
 import re
+import time
+import warnings
 from typing import Any, Protocol, runtime_checkable
+
+import requests.exceptions as _rexc
 
 from tindalos.config import Settings, get_settings
 
@@ -199,28 +204,66 @@ _SCENE_TOOL = {
 
 
 def _parse_json(content: str) -> Any:
-    """从模型回复提取 JSON：容忍 ```json 围栏与前后缀文本。"""
+    """从模型回复提取 JSON：容忍围栏、未闭合围栏、前后缀文字与顶层数组。
+
+    解析顺序：
+    1. 剥离 ```json / ```（含无语言围栏、未闭合围栏）；
+    2. 完整解析（数组/对象均可）；
+    3. 失败则截取首个 {…} 或 […] 跨度兜底（容忍说明文字包裹）。
+    """
     if not content:
         raise ValueError("空回复")
     text = content.strip()
-    fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    fence = re.search(r"```(?:[a-zA-Z]*)?\s*(.*?)(?:```|\Z)", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end > start:
-        text = text[start : end + 1]
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    for open_ch, close_ch in (("{", "}"), ("[", "]")):
+        start, end = text.find(open_ch), text.rfind(close_ch)
+        if start == -1 or end <= start:
+            continue
+        try:
+            return json.loads(text[start : end + 1])
+        except (json.JSONDecodeError, ValueError):
+            continue
+    raise ValueError(f"无法从模型回复解析 JSON: {content[:120]!r}")
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """请求异常是否值得重试：超时/连接错误、HTTP 5xx 与 429；4xx 属配置/模型问题不重试。"""
+    if isinstance(exc, (_rexc.Timeout, _rexc.ConnectionError)):
+        return True
+    if isinstance(exc, _rexc.HTTPError):
+        status = exc.response.status_code if exc.response is not None else None
+        return status is None or status >= 500 or status == 429
+    return False
 
 
 class OllamaGenerator:
     """OpenAI 兼容 /chat/completions 客户端（Ollama）。
 
     仅 settings.llm_enabled 时经 build_generator() 构造；网络失败或回复不可解析时
-    回退 DeterministicGenerator，保证管线在任何情况下可收敛。
+    回退 DeterministicGenerator 并发出 UserWarning，保证管线在任何情况下可收敛。
+
+    timeout / max_retries / retry_delay 可经构造参数覆盖，缺省取 settings.llm_timeout
+    / llm_max_retries（环境变量 TINDALOS_LLM_TIMEOUT / TINDALOS_LLM_MAX_RETRIES）。
     """
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+        retry_delay: float = 1.0,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.timeout = float(timeout if timeout is not None else self.settings.llm_timeout)
+        self.max_retries = int(max_retries if max_retries is not None else self.settings.llm_max_retries)
+        self.retry_delay = float(retry_delay)
         self._fallback = DeterministicGenerator()
         try:
             import requests  # 延迟导入：离线环境不强制依赖
@@ -241,45 +284,184 @@ class OllamaGenerator:
         }
         if tools:
             payload["tools"] = tools
-        resp = self._requests.post(url, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        message = data["choices"][0]["message"]
-        if message.get("tool_calls"):  # function calling 分支
-            return json.dumps({"tool_calls": message["tool_calls"]})
-        return message.get("content", "")
+        last_exc: BaseException | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = self._requests.post(url, json=payload, timeout=self.timeout)
+                resp.raise_for_status()
+                data = resp.json()
+                message = data["choices"][0]["message"]
+                tool_calls = message.get("tool_calls")
+                if tool_calls:  # function calling 分支：提取首个工具调用的 arguments
+                    fn = tool_calls[0].get("function", {})
+                    args = fn.get("arguments")
+                    if isinstance(args, str) and args.strip():
+                        return args
+                    if isinstance(args, dict):
+                        return json.dumps(args, ensure_ascii=False)
+                    raise ValueError("tool_calls 缺少 function.arguments（无法解析）")
+                return message.get("content", "")
+            except Exception as e:  # noqa: BLE001 - 网络/解析异常统一按可重试性处理
+                last_exc = e
+                if attempt >= self.max_retries or not _is_retryable(e):
+                    raise
+                time.sleep(self.retry_delay)
+        raise last_exc  # pragma: no cover - 循环必然 raise 或 return
 
-    def _generate(self, prompt: str, tools: list[dict] | None = None) -> dict:
+    def _generate(self, prompt: str, tools: list[dict] | None = None) -> tuple[Any, BaseException | None]:
+        """返回 (解析结果, 异常)。异常透传根因（不吞栈）：调用方在告警中带类型与消息。"""
         try:
-            return _parse_json(self._chat(prompt, tools=tools))
-        except Exception:
-            return {}
+            return _parse_json(self._chat(prompt, tools=tools)), None
+        except Exception as e:  # noqa: BLE001 - 网络/解析异常统一透传，由告警表达
+            return {}, e
 
-    # -- 协议实现（失败一律回退确定性） ----------------------------
+    @staticmethod
+    def _exc_detail(exc: BaseException) -> str:
+        """根因消息 + HTTP 状态码（如 HTTPStatusError (HTTP 410)）。"""
+        code = ""
+        resp = getattr(exc, "response", None)
+        if resp is not None and getattr(resp, "status_code", None):
+            code = f" (HTTP {resp.status_code})"
+        return f"{type(exc).__name__}{code}: {exc}"
+
+    # -- 失败告警 + 草案规整 --------------------------------------
+    def _warn_fallback(self, what: str) -> None:
+        warnings.warn(
+            f"OllamaGenerator 生成失败（{what}），回退 DeterministicGenerator",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    @staticmethod
+    def _norm_acts(items: Any) -> list[dict]:
+        """规整 LLM 幕草案：要求 title；补 id/roman/summary/scene_titles/npc_ids 缺省；
+        所有标量统一转 str（真实模型会返回 int id 等，避免下游 re.search 崩溃）。"""
+        out: list[dict] = []
+        for i, it in enumerate(items or []):
+            if not isinstance(it, dict):
+                continue
+            it = dict(it)
+            title = str(it.get("title") or "").strip()
+            if not title:
+                continue
+            if not str(it.get("id") or "").strip():
+                it["id"] = "act-" + hashlib.sha1(title.encode("utf-8")).hexdigest()[:6]
+            elif str(it["id"]).strip().isdigit():
+                # 裸数字 id（如 1）会与 npc/scene id 跨实体冲突 → 加类型前缀
+                it["id"] = f"act-{str(it['id']).strip()}"
+            else:
+                it["id"] = str(it["id"]).strip()
+            it["title"] = title
+            it["roman"] = str(it.get("roman") or _ROMANS[len(out) % len(_ROMANS)])
+            it["summary"] = str(it.get("summary") or "")
+            it["npc_ids"] = [str(x) for x in (it.get("npc_ids") or []) if isinstance(x, str)]
+            titles = it.get("scene_titles")
+            it["scene_titles"] = (
+                [str(x) for x in titles if isinstance(x, str)]
+                if isinstance(titles, list)
+                else ([str(titles)] if titles else [f"场景·{title}其一", f"场景·{title}其二"])
+            )
+            out.append(it)
+        return out
+
+    @staticmethod
+    def _norm_npcs(items: Any) -> list[dict]:
+        """规整 LLM NPC 草案：要求 name；补 id/archetype/personality/description/acts_roles；
+        id/name 统一转 str；acts_roles 非 dict（如列表）与 personality 非 list[str] 时规整，
+        避免 pydantic 校验失败中断整条管线。"""
+        out: list[dict] = []
+        for i, it in enumerate(items or []):
+            if not isinstance(it, dict):
+                continue
+            it = dict(it)
+            name = str(it.get("name") or "").strip()
+            if not name:
+                continue
+            if not str(it.get("id") or "").strip():
+                it["id"] = f"npc-{i + 1}"
+            elif str(it["id"]).strip().isdigit():
+                # 裸数字 id（如 1）会与 act/scene id 跨实体冲突 → 加类型前缀
+                it["id"] = f"npc-{str(it['id']).strip()}"
+            else:
+                it["id"] = str(it["id"]).strip()
+            it["name"] = name
+            it.setdefault("archetype", "调查员")
+            it.setdefault("description", "")
+            pers = it.get("personality")
+            it["personality"] = (
+                [str(p) for p in pers if isinstance(p, str)]
+                if isinstance(pers, list)
+                else ([str(pers)] if pers else [])
+            )
+            roles = it.get("acts_roles")
+            it["acts_roles"] = (
+                {str(k): str(v) for k, v in roles.items() if isinstance(v, (str, int))}
+                if isinstance(roles, dict)
+                else {}
+            )
+            out.append(it)
+        return out
+
+    @staticmethod
+    def _norm_scene(doc: Any) -> dict | None:
+        """规整 LLM 场景草案：要求 title 且至少 1 个事件（下游需 events[-1] 取 outcome）；
+        事件 kind 非法时按位置兜底 entry/trigger/outcome。"""
+        if not isinstance(doc, dict):
+            return None
+        if not str(doc.get("title") or "").strip():
+            return None
+        out = dict(doc)
+        events: list[dict] = []
+        for i, ev in enumerate(doc.get("events") or []):
+            if not isinstance(ev, dict):
+                continue
+            ev = dict(ev)
+            kind = str(ev.get("kind") or "").strip().lower()
+            if kind not in _EVENT_KINDS:
+                kind = _EVENT_KINDS[min(i, len(_EVENT_KINDS) - 1)]
+            ev.setdefault("title", f"事件{i + 1}")
+            ev["kind"] = kind
+            events.append(ev)
+        if not events:
+            return None
+        out["events"] = events
+        out["npc_ids"] = [str(x) for x in (doc.get("npc_ids") or []) if isinstance(x, str)]
+        return out
+
+    # -- 协议实现（失败一律告警并回退确定性） ----------------------
     def generate_acts(self, premise: str, n_acts: int) -> list[dict[str, Any]]:
         prompt = f"你是 TRPG 主控（KP）。根据前提拟定 {n_acts} 幕结构草案，输出 JSON 数组：每项含 id/roman/title/summary/npc_ids/scene_titles。\n前提：{premise}"
-        doc = self._generate(prompt)
-        acts = doc if isinstance(doc, list) else doc.get("acts", []) if isinstance(doc, dict) else []
-        if not isinstance(acts, list) or not acts:
+        doc, exc = self._generate(prompt)
+        items = doc if isinstance(doc, list) else (doc.get("acts", []) if isinstance(doc, dict) else [])
+        acts = self._norm_acts(items)
+        if not acts:
+            detail = "无有效 JSON" if exc is None else self._exc_detail(exc)
+            self._warn_fallback(f"generate_acts：{detail}")
             return self._fallback.generate_acts(premise, n_acts)
-        return [a for a in acts if isinstance(a, dict)][:n_acts]
+        return acts[:n_acts]
 
     def generate_npcs(self, premise: str, n: int) -> list[dict[str, Any]]:
         prompt = f"你是 NPC 生成器。根据前提生成 {n} 个 NPC，输出 JSON 数组：每项含 id/name/archetype/personality(数组)/description/acts_roles。\n前提：{premise}"
-        doc = self._generate(prompt)
-        npcs = doc if isinstance(doc, list) else doc.get("npcs", []) if isinstance(doc, dict) else []
-        if not isinstance(npcs, list) or not npcs:
+        doc, exc = self._generate(prompt)
+        items = doc if isinstance(doc, list) else (doc.get("npcs", []) if isinstance(doc, dict) else [])
+        npcs = self._norm_npcs(items)
+        if not npcs:
+            detail = "无有效 JSON" if exc is None else self._exc_detail(exc)
+            self._warn_fallback(f"generate_npcs：{detail}")
             return self._fallback.generate_npcs(premise, n)
-        return [n for n in npcs if isinstance(n, dict)][:n]
+        return npcs[:n]
 
     def generate_scene(self, act_title: str, premise: str, npc_ids: list[str]) -> dict[str, Any]:
         prompt = (
             f"为「{act_title}」生成一个场景：调用 generate_scene 工具，npc_ids={list(npc_ids)}，"
             f"事件序列须为 entry→trigger→outcome。\n前提：{premise}"
         )
-        doc = self._generate(prompt, tools=[_SCENE_TOOL])
-        if isinstance(doc, dict) and doc.get("id"):
-            return doc
+        doc, exc = self._generate(prompt, tools=[_SCENE_TOOL])
+        norm = self._norm_scene(doc)
+        if norm is not None:
+            return norm
+        detail = "无有效场景 JSON" if exc is None else self._exc_detail(exc)
+        self._warn_fallback(f"generate_scene：{detail}")
         return self._fallback.generate_scene(act_title, premise, npc_ids)
 
 

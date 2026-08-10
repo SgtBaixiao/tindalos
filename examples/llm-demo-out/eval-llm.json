@@ -1,0 +1,60 @@
+{
+  "campaign_id": "campaign-61403a39",
+  "campaign_title": "模组《雾港之夜》",
+  "total": 5.0,
+  "table": {
+    "structural": {
+      "score": 5,
+      "evidence": [],
+      "suggestion": null
+    },
+    "consistency": {
+      "score": 5,
+      "evidence": [],
+      "suggestion": null
+    },
+    "depth": {
+      "score": 5,
+      "evidence": [],
+      "suggestion": null
+    },
+    "playability": {
+      "score": 5,
+      "evidence": [],
+      "suggestion": null
+    }
+  },
+  "attribution": {
+    "structure": {
+      "label": "结构问题",
+      "count": 0,
+      "items": []
+    },
+    "data": {
+      "label": "引用/数据问题",
+      "count": 0,
+      "items": []
+    },
+    "model": {
+      "label": "生成风格/质量",
+      "count": 0,
+      "items": []
+    },
+    "evaluation": {
+      "label": "评测规则本身",
+      "count": 2,
+      "items": [
+        {
+          "kind": "note",
+          "text": "LLM 裁判未参与（未提供 judge_result），全部评分来自确定性规则"
+        },
+        {
+          "kind": "note",
+          "text": "确定性检查全部通过，无失败项需要归因"
+        }
+      ]
+    }
+  },
+  "judge": "none",
+  "generated_at": "2026-08-10T07:15:14+00:00"
+}

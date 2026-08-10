@@ -24,6 +24,14 @@ class Settings:
     llm_enabled: bool = field(
         default_factory=lambda: os.environ.get("TINDALOS_LLM_ENABLED", "0") == "1"
     )
+    # LLM 请求超时（秒，需容纳慢模型冷启动/长推理）
+    llm_timeout: float = field(
+        default_factory=lambda: float(os.environ.get("TINDALOS_LLM_TIMEOUT", "180"))
+    )
+    # LLM 请求重试次数（网络抖动 / 5xx / 429 时重试；4xx 不重试）
+    llm_max_retries: int = field(
+        default_factory=lambda: int(os.environ.get("TINDALOS_LLM_MAX_RETRIES", "2"))
+    )
     # LangGraph SqliteSaver checkpoint 目录
     checkpoint_dir: Path = field(default_factory=lambda: Path("data/checkpoints"))
     # 预留 store 持久化目录（当前 store 为 InMemoryStore，未消费此字段）
