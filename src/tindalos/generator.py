@@ -385,8 +385,20 @@ class OllamaGenerator:
             else:
                 it["id"] = str(it["id"]).strip()
             it["name"] = name
-            it.setdefault("archetype", "调查员")
-            it.setdefault("description", "")
+            # 标量规整：archetype/description 可能是列表（如 ['Ghost']）或非 str → 统一转 str
+            # （回归：真实模组 LLM 实验发现列表 archetype 会击穿 pydantic 校验中断整条管线）
+            arch = it.get("archetype")
+            it["archetype"] = (
+                "、".join(str(x).strip() for x in arch if str(x).strip())
+                if isinstance(arch, (list, tuple))
+                else (str(arch).strip() if arch is not None else "调查员")
+            ) or "调查员"
+            desc = it.get("description")
+            it["description"] = (
+                "、".join(str(x).strip() for x in desc if str(x).strip())
+                if isinstance(desc, (list, tuple))
+                else (str(desc).strip() if desc is not None else "")
+            )
             pers = it.get("personality")
             it["personality"] = (
                 [str(p) for p in pers if isinstance(p, str)]

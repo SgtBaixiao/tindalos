@@ -1,15 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 398" font-family="sans-serif">
-<rect width="1280" height="398" fill="#FAF6EF"/>
-<text x="24" y="34" font-size="20" font-weight="800" fill="#2B2620" font-family="Century Gothic, sans-serif">Tindalos · 模组《模组《雾港之夜》》剧本结构</text>
-<text x="24" y="56" font-size="12" fill="#8A7F6D">2 幕 · 4 场景 · 12 事件 · 3 NPC · 2 线索 · 关系 3 条</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 518" font-family="sans-serif">
+<rect width="1280" height="518" fill="#FAF6EF"/>
+<text x="24" y="34" font-size="20" font-weight="800" fill="#2B2620" font-family="Century Gothic, sans-serif">Tindalos · 模组《模组《To Hell or Connaught》》剧本结构</text>
+<text x="24" y="56" font-size="12" fill="#8A7F6D">2 幕 · 6 场景 · 18 事件 · 3 NPC · 2 线索 · 关系 3 条</text>
 <rect x="24" y="70" width="300" height="58" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="70" width="300" height="5" fill="#D64545"/>
-<text x="34" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第I幕·初现端倪</text>
-<text x="34" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">围绕「雾港之夜」的第I幕：初现端倪。</text>
+<text x="34" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">恶名昭彰：深渊中的挑战者</text>
+<text x="34" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">在这个充满黑暗与未知的世界中，玩家将扮演一名被诅咒的旅行者。他们必须</text>
 <rect x="24" y="142" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="142" width="300" height="5" fill="#E8620C"/>
-<text x="34" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">场景·初现端倪其一</text>
-<text x="34" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">清晨 · 古董店</text>
+<text x="34" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第一章：诅咒之地</text>
+<text x="34" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">傍晚 · 旧图书馆</text>
 <rect x="38" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="38" y="212" width="87" height="5" fill="#6B7A55"/>
 <text x="48" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
@@ -22,8 +22,8 @@
 <line x1="324" y1="172" x2="340" y2="172" stroke="#D64545" stroke-width="2"/>
 <rect x="24" y="262" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="262" width="300" height="5" fill="#E8620C"/>
-<text x="34" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">场景·初现端倪其二</text>
-<text x="34" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">清晨 · 古董店</text>
+<text x="34" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第二章：沼泽的考验</text>
+<text x="34" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">深夜 · 旧图书馆</text>
 <rect x="38" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="38" y="332" width="87" height="5" fill="#6B7A55"/>
 <text x="48" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
@@ -33,54 +33,80 @@
 <rect x="219" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="219" y="332" width="87" height="5" fill="#6B7A55"/>
 <text x="229" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<rect x="24" y="382" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="382" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第三章：地狱之门</text>
+<text x="34" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">傍晚 · 旧图书馆</text>
+<rect x="38" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<rect x="129" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<rect x="219" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
 <rect x="340" y="70" width="300" height="58" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="70" width="300" height="5" fill="#D64545"/>
-<text x="350" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第II幕·深入漩涡</text>
-<text x="350" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">围绕「雾港之夜」的第II幕：深入漩涡。</text>
+<text x="350" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">深渊的秘密：面对与被面对</text>
+<text x="350" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">在前一幕的基础上，玩家将深入探索地狱内部，与来自不同维度的恶魔和灵魂</text>
 <rect x="340" y="142" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="142" width="300" height="5" fill="#E8620C"/>
-<text x="350" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">场景·深入漩涡其一</text>
-<text x="350" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">傍晚 · 废弃码头</text>
+<text x="350" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第四章：地狱深处</text>
+<text x="350" y="190" font-size="10" fill="#5C5345" font-family="sans-serif"> · 地狱深处</text>
 <rect x="354" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="354" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="364" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="364" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 事件1</text>
 <rect x="445" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="445" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="455" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="455" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 事件2</text>
 <rect x="535" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="535" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="545" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="545" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事件3</text>
 <rect x="340" y="262" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="262" width="300" height="5" fill="#E8620C"/>
-<text x="350" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">场景·深入漩涡其二</text>
-<text x="350" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">深夜 · 废弃码头</text>
+<text x="350" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第五章：恶魔之王的挑战</text>
+<text x="350" y="310" font-size="10" fill="#5C5345" font-family="sans-serif"> · </text>
 <rect x="354" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="354" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="364" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="364" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入Connaugh</text>
 <rect x="445" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="445" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="455" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="455" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 恶魔之王发起挑战</text>
 <rect x="535" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="535" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="545" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="545" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 击败或逃离</text>
+<rect x="340" y="382" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="382" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第六章：灵魂间的对话</text>
+<text x="350" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">午夜 · 旧图书馆</text>
+<rect x="354" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<rect x="445" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<rect x="535" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="452" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
 <text x="676" y="86" font-size="13" font-weight="800" fill="#3E4A5A">NPC（3）</text>
 <rect x="676" y="96" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="96" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="126" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">顾长歌</text>
-<text x="686" y="144" font-size="10" fill="#5C5345" font-family="sans-serif">调查员</text>
+<text x="686" y="126" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Raven</text>
+<text x="686" y="144" font-size="10" fill="#5C5345" font-family="sans-serif">Vengeful Ghost、Gambler</text>
 <rect x="676" y="130" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="130" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="160" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">苏晚晴</text>
-<text x="686" y="178" font-size="10" fill="#5C5345" font-family="sans-serif">记者</text>
+<text x="686" y="160" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Marauder</text>
+<text x="686" y="178" font-size="10" fill="#5C5345" font-family="sans-serif">Vigilante、Violent</text>
 <rect x="676" y="164" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="164" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="194" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">赵远山</text>
-<text x="686" y="212" font-size="10" fill="#5C5345" font-family="sans-serif">药剂师</text>
+<text x="686" y="194" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Vendetta</text>
+<text x="686" y="212" font-size="10" fill="#5C5345" font-family="sans-serif">Outsider、Mercenary</text>
 <text x="676" y="208" font-size="13" font-weight="800" fill="#4A3B28">线索（2）</text>
 <rect x="676" y="220" width="200" height="24" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="220" width="200" height="5" fill="#4A3B28"/>
-<text x="686" y="250" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第I幕·初现端倪的关键线索</text>
+<text x="686" y="250" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">恶名昭彰：深渊中的挑战者的关键线索</text>
 <rect x="676" y="250" width="200" height="24" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="250" width="200" height="5" fill="#4A3B28"/>
-<text x="686" y="280" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第II幕·深入漩涡的关键线索</text>
+<text x="686" y="280" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">深渊的秘密：面对与被面对的关键线索</text>
 </svg>

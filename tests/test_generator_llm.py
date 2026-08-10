@@ -366,3 +366,13 @@ class TestGenerate:
         assert acts  # 降级回退仍产出
         joined = " ".join(str(w.message) for w in rec.list)
         assert "HTTPStatusError" in joined and "410" in joined and "Model retired" in joined
+
+    def test_norm_npcs_coerces_list_archetype(self) -> None:
+        """回归（真实模组实验发现）：LLM 返回 archetype 为列表（如 ['Ghost']）时，
+        _norm_npcs 必须规整为 str，否则 pydantic 校验失败中断整条管线（非优雅降级）。"""
+        payload = _msg('[{"name": "伯纳德", "archetype": ["Ghost"], "personality": ["阴沉"], "description": "佣兵"}]')
+        g = _make_generator(_FakeRequests(payload))
+        npcs = g.generate_npcs("1649 年爱尔兰", 1)
+        assert len(npcs) == 1
+        assert isinstance(npcs[0]["archetype"], str), f"archetype 必须是 str: {npcs[0]['archetype']!r}"
+        assert npcs[0]["archetype"] == "Ghost" or npcs[0]["archetype"] == "Ghost, 佣兵"

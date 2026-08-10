@@ -44,3 +44,33 @@ jobs:
         run: npm run build
       - name: Verify dist
         run: test -d dist && test -f dist/index.html && echo "dist OK"
+
+  smoke:
+    name: cold-start smoke (README 快速开始)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev,llm]"
+      - name: Generate (离线确定性)
+        run: tindalos generate examples/sample-module.md --out /tmp/c.json && test -s /tmp/c.json
+      - name: Eval (stdout 纯 JSON 含 4 维)
+        run: tindalos eval /tmp/c.json 2>/dev/null | python -c "import sys,json; d=json.load(sys.stdin); assert all(k in d['table'] for k in ('structural','consistency','depth','playability')); print('eval JSON OK')"
+      - name: Eval (2>&1 含分数表)
+        run: tindalos eval /tmp/c.json 2>&1 | grep -q '\[structural\] score=5'
+      - name: Evolve (坏剧本收敛)
+        run: tindalos evolve examples/campaign-broken.json --rounds 3 --out /tmp/e.json 2>&1 | grep -qE 'round 1: .* -> .*'
+      - name: Kg 查询
+        run: tindalos kg examples/campaign.json --entity npc-1 2>&1 | grep -q npc-1
+      - name: Memories (跨会话记忆)
+        run: tindalos memories /tmp/c.json 2>&1 | grep -qE 'NPC 印象|关键事件'
+      - name: Notes (含记忆节)
+        run: tindalos notes /tmp/c.json --out /tmp/n.md && grep -q '## 记忆' /tmp/n.md
+      - name: Regenerate (真实 scene id)
+        run: |
+          SID=$(python -c "import json; print(json.load(open('/tmp/c.json'))['acts'][0]['scenes'][0]['id'])")
+          tindalos regenerate /tmp/c.json --node "$SID" --out /tmp/r.json 2>&1 | grep -qE '重生成|回滚'
