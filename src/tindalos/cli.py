@@ -128,6 +128,8 @@ def _generate_campaign(
 
     线索/关系/Campaign 装配与备团笔记统一委托 pipeline.compose_campaign（t10 去重复）。
     """
+    if hasattr(generator, "set_module_context"):  # LLM 生成基于模组全文（loop 迭代改进）
+        generator.set_module_context(module_text, title=module_text.strip().splitlines()[0][:40] if module_text.strip() else "")
     act_drafts = generator.generate_acts(premise, n_acts)
     npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
     npc_ids = list(npcs.keys())

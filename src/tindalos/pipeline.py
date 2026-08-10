@@ -118,8 +118,23 @@ def extract_premise(module_text: str) -> str:
 
 
 def title_from_text(module_text: str) -> str:
-    """从模组文本派生标题（公共入口：pipeline 与 cli 共用）。"""
+    """从模组文本派生标题（公共入口：pipeline 与 cli 共用）。
+
+    优先「# 模组：xxx」行与首个 H1；旧逻辑（跳过含冒号行）会把结构化文档的
+    「## 元信息」误判为标题（真实模组实验发现，2026-08-11）。
+    """
     lines = [l.strip() for l in (module_text or "").splitlines() if l.strip()]
+    # 1) 优先「模组：」标题行（organized 格式的 H1）
+    for line in lines:
+        cleaned = line.lstrip("#").strip()
+        if cleaned.startswith("模组"):
+            title = re.split(r"[:：]", cleaned, maxsplit=1)[-1].strip()
+            return title[:40] if title else cleaned[:40]
+    # 2) 首个 H1（# 开头且非 ##）
+    for line in lines:
+        if line.startswith("# ") and not line.startswith("## "):
+            return line.lstrip("#").strip()[:40]
+    # 3) 旧逻辑兜底
     for line in lines:
         cleaned = line.lstrip("#").strip()
         if cleaned and "：" not in cleaned[:8]:

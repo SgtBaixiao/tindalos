@@ -60,8 +60,8 @@ class _FakeRequests:
         self._results = list(results)
         self.calls: list[dict] = []
 
-    def post(self, url, json=None, timeout=None):
-        self.calls.append({"url": url, "json": json, "timeout": timeout})
+    def post(self, url, json=None, headers=None, timeout=None):
+        self.calls.append({"url": url, "json": json, "headers": headers or {}, "timeout": timeout})
         idx = min(len(self.calls) - 1, len(self._results) - 1)
         r = self._results[idx]
         if isinstance(r, Exception):
@@ -376,3 +376,48 @@ class TestGenerate:
         assert len(npcs) == 1
         assert isinstance(npcs[0]["archetype"], str), f"archetype 必须是 str: {npcs[0]['archetype']!r}"
         assert npcs[0]["archetype"] == "Ghost" or npcs[0]["archetype"] == "Ghost, 佣兵"
+
+
+    def test_api_key_sets_authorization_header(self) -> None:
+        """云端 API：settings.api_key 存在时请求必须带 Authorization: Bearer 头（2026-08-11 接入）。"""
+        s = _settings()
+        s.api_key = "sk-test1234567890"
+        fake = _FakeRequests(_msg('[{"name": "伯纳德", "archetype": "佣兵"}]'))
+        g = _make_generator(fake)
+        g.settings = s
+        g.generate_npcs("前提", 1)
+        assert fake.calls, "无请求发出"
+        assert fake.calls[0]["headers"].get("Authorization") == "Bearer sk-test1234567890"
+
+    def test_no_api_key_no_auth_header(self) -> None:
+        s = _settings()
+        s.api_key = ""
+        fake = _FakeRequests(_msg('[{"name": "伯纳德"}]'))
+        g = _make_generator(fake)
+        g.settings = s
+        g.generate_npcs("前提", 1)
+        assert "Authorization" not in fake.calls[0]["headers"]
+
+    def test_module_context_injected_into_prompt(self) -> None:
+        """模组全文注入：set_module_context 后，请求 prompt 必须携带背景块（loop 迭代改进）。"""
+        s = _settings()
+        s.api_key = ""
+        fake = _FakeRequests(_msg('[{"name": "伯纳德", "archetype": "佣兵"}]'))
+        g = _make_generator(fake)
+        g.settings = s
+        g.set_module_context("1649 年爱尔兰。克伦威尔登陆。地下神庙有旧印。", title="留地不留头")
+        g.generate_npcs("前提", 1)
+        prompt = fake.calls[0]["json"]["messages"][0]["content"]
+        assert "留地不留头" in prompt and "1649 年爱尔兰" in prompt and "背景资料" in prompt
+
+    def test_module_context_truncated_to_limit(self) -> None:
+        s = _settings()
+        s.api_key = ""
+        s.llm_context_chars = 20
+        fake = _FakeRequests(_msg('[{"name": "伯纳德"}]'))
+        g = _make_generator(fake)
+        g.settings = s
+        g.set_module_context("A" * 500, title="T")
+        g.generate_npcs("前提", 1)
+        prompt = fake.calls[0]["json"]["messages"][0]["content"]
+        assert len(g._module_context) <= 20

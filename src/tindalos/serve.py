@@ -74,6 +74,8 @@ def default_generate(module_text: str, llm: bool, emit: Callable[[str, str], boo
     from tindalos.pipeline import build_pipeline
 
     generator = _resolve_serve_generator(llm)
+    if hasattr(generator, "set_module_context"):  # LLM 生成基于模组全文（loop 迭代改进）
+        generator.set_module_context(module_text, title=module_text.strip().splitlines()[0][:40] if module_text.strip() else "")
     app = build_pipeline(generator=generator)
     config = {"configurable": {"thread_id": f"serve-{uuid.uuid4().hex[:8]}"}}
     final: dict | None = None

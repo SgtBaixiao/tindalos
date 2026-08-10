@@ -265,6 +265,8 @@ class OllamaGenerator:
         self.max_retries = int(max_retries if max_retries is not None else self.settings.llm_max_retries)
         self.retry_delay = float(retry_delay)
         self._fallback = DeterministicGenerator()
+        self._module_context = ""
+        self._module_title = ""
         try:
             import requests  # 延迟导入：离线环境不强制依赖
 
@@ -272,14 +274,31 @@ class OllamaGenerator:
         except ImportError:  # pragma: no cover - requests 缺失时退化为确定性
             self._requests = None
 
+    # -- 模组上下文注入（loop 迭代改进，2026-08-11） ---------------
+    def set_module_context(self, text: str, title: str = "") -> None:
+        """注入模组全文背景（截断至 settings.llm_context_chars）。剧本生成将基于模组真实内容。"""
+        self._module_title = title or ""
+        limit = getattr(self.settings, "llm_context_chars", 12000) or 0
+        self._module_context = text[:limit] if limit and text else (text if not limit else "")
+
+    def _ctx(self) -> str:
+        """prompt 追加的模组背景块（未注入则空串）；在 _chat 层统一应用，覆盖所有生成 prompt。"""
+        if not self._module_context:
+            return ""
+        head = f"模组《{self._module_title}》背景资料（生成内容须忠实于以下背景）：\n" if self._module_title else "模组背景资料（生成内容须忠实于以下背景）：\n"
+        return "\n\n" + head + self._module_context
+
     # -- 底层对话 ------------------------------------------------
     def _chat(self, prompt: str, *, tools: list[dict] | None = None) -> str:
         if self._requests is None:
             raise RuntimeError("requests 不可用")
         url = f"{self.settings.ollama_base_url.rstrip('/')}/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        if self.settings.api_key:  # 云端 API（DeepSeek/Kimi/GLM/Qwen 等）需 Bearer 头
+            headers["Authorization"] = f"Bearer {self.settings.api_key}"
         payload: dict[str, Any] = {
             "model": self.settings.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": prompt + self._ctx()}],
             "temperature": 0.7,
         }
         if tools:
@@ -287,7 +306,7 @@ class OllamaGenerator:
         last_exc: BaseException | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                resp = self._requests.post(url, json=payload, timeout=self.timeout)
+                resp = self._requests.post(url, json=payload, headers=headers, timeout=self.timeout)
                 resp.raise_for_status()
                 data = resp.json()
                 message = data["choices"][0]["message"]

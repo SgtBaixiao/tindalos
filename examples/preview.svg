@@ -1,112 +1,242 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 518" font-family="sans-serif">
-<rect width="1280" height="518" fill="#FAF6EF"/>
-<text x="24" y="34" font-size="20" font-weight="800" fill="#2B2620" font-family="Century Gothic, sans-serif">Tindalos · 模组《模组《To Hell or Connaught》》剧本结构</text>
-<text x="24" y="56" font-size="12" fill="#8A7F6D">2 幕 · 6 场景 · 18 事件 · 3 NPC · 2 线索 · 关系 3 条</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1118" font-family="sans-serif">
+<rect width="1280" height="1118" fill="#FAF6EF"/>
+<text x="24" y="34" font-size="20" font-weight="800" fill="#2B2620" font-family="Century Gothic, sans-serif">Tindalos · 模组《模组《留地不留头（To Hell or Connaught）》》剧本结构</text>
+<text x="24" y="56" font-size="12" fill="#8A7F6D">2 幕 · 16 场景 · 48 事件 · 3 NPC · 2 线索 · 关系 3 条</text>
 <rect x="24" y="70" width="300" height="58" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="70" width="300" height="5" fill="#D64545"/>
-<text x="34" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">恶名昭彰：深渊中的挑战者</text>
-<text x="34" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">在这个充满黑暗与未知的世界中，玩家将扮演一名被诅咒的旅行者。他们必须</text>
+<text x="34" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">血雨腥风</text>
+<text x="34" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，德罗赫达陷落次日。克伦威尔麾下的PC们被召至总</text>
 <rect x="24" y="142" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="142" width="300" height="5" fill="#E8620C"/>
-<text x="34" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第一章：诅咒之地</text>
-<text x="34" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">傍晚 · 旧图书馆</text>
+<text x="34" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">克伦威尔的命令</text>
+<text x="34" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，清晨，暴雨将至 · 德罗赫达镇，克伦威尔总部庄</text>
 <rect x="38" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="38" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="48" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="48" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 信使传召</text>
 <rect x="129" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="129" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="139" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="139" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 克伦威尔的命令</text>
 <rect x="219" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="219" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="229" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="229" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 踏入血雨</text>
 <line x1="324" y1="172" x2="340" y2="172" stroke="#D64545" stroke-width="2"/>
 <rect x="24" y="262" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="262" width="300" height="5" fill="#E8620C"/>
-<text x="34" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第二章：沼泽的考验</text>
-<text x="34" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">深夜 · 旧图书馆</text>
+<text x="34" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">仓库中的尸体</text>
+<text x="34" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，午后至傍晚 · 德罗赫达镇，阿斯顿爵士的仓库（</text>
 <rect x="38" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="38" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="48" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="48" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入仓库</text>
 <rect x="129" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="129" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="139" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="139" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 尸体与祭坛的异象</text>
 <rect x="219" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="219" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="229" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="229" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 发现地下竖井</text>
 <rect x="24" y="382" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="24" y="382" width="300" height="5" fill="#E8620C"/>
-<text x="34" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第三章：地狱之门</text>
-<text x="34" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">傍晚 · 旧图书馆</text>
+<text x="34" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">祭坛与竖井</text>
+<text x="34" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，午后 · 阿斯顿爵士的仓库（原圣塞莱斯廷教堂）</text>
 <rect x="38" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="38" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="48" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="48" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 进入仓库</text>
 <rect x="129" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="129" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="139" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="139" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现祭坛与竖井</text>
 <rect x="219" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="219" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="229" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="229" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 深入竖井</text>
+<rect x="24" y="502" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="502" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="532" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">地下神庙</text>
+<text x="34" y="550" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，午后 · 德罗赫达镇，阿斯顿爵士仓库（原圣塞莱</text>
+<rect x="38" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 进入竖井，踏入古庙</text>
+<rect x="129" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 壁画与浮雕：缪楚的真</text>
+<rect x="219" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 封印的裂隙：真相浮出</text>
+<rect x="24" y="622" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="622" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="652" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">医院中的证人</text>
+<text x="34" y="670" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月11日，午后 · 德罗赫达镇临时军事医院（原圣约翰大教</text>
+<rect x="38" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入恶臭的地下室</text>
+<rect x="129" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 奥唐奈的疯言疯语与突</text>
+<rect x="219" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 老囚犯的诅咒与仓皇逃</text>
+<rect x="24" y="742" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="742" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="772" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">市政厅的文献</text>
+<text x="34" y="790" font-size="10" fill="#5C5345" font-family="sans-serif">1649 年 9 月 11 日，午后 · 德罗赫达镇市政厅</text>
+<rect x="38" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入市政厅</text>
+<rect x="129" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 翻检尘封的记录</text>
+<rect x="219" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 文献背后的阴影</text>
+<rect x="24" y="862" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="862" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="892" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">与卡文迪什共进晚餐</text>
+<text x="34" y="910" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月12日，夜晚 · 克伦威尔总部庄园内，卡文迪什上校的私</text>
+<rect x="38" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 受邀赴宴</text>
+<rect x="129" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 套取调查进展</text>
+<rect x="219" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 晚宴的余波</text>
+<rect x="24" y="982" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="24" y="982" width="300" height="5" fill="#E8620C"/>
+<text x="34" y="1012" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">抹大拉的玛利亚塔密会</text>
+<text x="34" y="1030" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，午夜时分，暴雨倾盆 · 德罗赫达镇，抹大拉的玛利亚塔</text>
+<rect x="38" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="38" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="48" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 午夜潜入玛利亚塔</text>
+<rect x="129" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="129" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="139" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 多米尼克神父的警告与</text>
+<rect x="219" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="219" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="229" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 密会终结·暗影中的杀</text>
 <rect x="340" y="70" width="300" height="58" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="70" width="300" height="5" fill="#D64545"/>
-<text x="350" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">深渊的秘密：面对与被面对</text>
-<text x="350" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">在前一幕的基础上，玩家将深入探索地狱内部，与来自不同维度的恶魔和灵魂</text>
+<text x="350" y="100" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">蛇之低语</text>
+<text x="350" y="118" font-size="10" fill="#5C5345" font-family="sans-serif">PC们带着初步调查结果离开德罗赫达，前往都柏林附近的圣帕特里克兄弟会</text>
 <rect x="340" y="142" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="142" width="300" height="5" fill="#E8620C"/>
-<text x="350" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第四章：地狱深处</text>
-<text x="350" y="190" font-size="10" fill="#5C5345" font-family="sans-serif"> · 地狱深处</text>
+<text x="350" y="172" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">夜袭蛇人</text>
+<text x="350" y="190" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月12日，深夜 · 德罗赫达以东通往都柏林的荒僻道路，茂</text>
 <rect x="354" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="354" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="364" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 事件1</text>
+<text x="364" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 入林</text>
 <rect x="445" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="445" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="455" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 事件2</text>
+<text x="455" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 蛇群合围</text>
 <rect x="535" y="212" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="535" y="212" width="87" height="5" fill="#6B7A55"/>
-<text x="545" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事件3</text>
+<text x="545" y="242" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 血战与余波</text>
 <rect x="340" y="262" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="262" width="300" height="5" fill="#E8620C"/>
-<text x="350" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第五章：恶魔之王的挑战</text>
-<text x="350" y="310" font-size="10" fill="#5C5345" font-family="sans-serif"> · </text>
+<text x="350" y="292" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">圣帕特里克兄弟会修道院</text>
+<text x="350" y="310" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，傍晚弥撒之后 · 都柏林附近，圣帕特里克兄弟会修道院</text>
 <rect x="354" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="354" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="364" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入Connaugh</text>
+<text x="364" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 进入秘密图书馆</text>
 <rect x="445" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="445" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="455" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 恶魔之王发起挑战</text>
+<text x="455" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 翻阅《圣帕特里克的忏</text>
 <rect x="535" y="332" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="535" y="332" width="87" height="5" fill="#6B7A55"/>
-<text x="545" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 击败或逃离</text>
+<text x="545" y="362" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 真相大白：缪楚的真实</text>
 <rect x="340" y="382" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="340" y="382" width="300" height="5" fill="#E8620C"/>
-<text x="350" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">第六章：灵魂间的对话</text>
-<text x="350" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">午夜 · 旧图书馆</text>
+<text x="350" y="412" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">弥撒中的恐怖</text>
+<text x="350" y="430" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，傍晚弥撒时分 · 圣帕特里克兄弟会修道院小教堂</text>
 <rect x="354" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="354" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="364" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 抵达现场</text>
+<text x="364" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 进入弥撒</text>
 <rect x="445" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="445" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="455" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 发现线索</text>
+<text x="455" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 麦克马洪的异变</text>
 <rect x="535" y="452" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="535" y="452" width="87" height="5" fill="#6B7A55"/>
-<text x="545" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 事态升级</text>
+<text x="545" y="482" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 恐怖降临</text>
+<rect x="340" y="502" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="502" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="532" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">隐藏的图书馆</text>
+<text x="350" y="550" font-size="10" fill="#5C5345" font-family="sans-serif">1649 年 9 月，午后（自德罗赫达出发数日后） · 圣帕特里克兄</text>
+<rect x="354" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入尘封的圣殿</text>
+<rect x="445" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 羊皮纸上的低语</text>
+<rect x="535" y="572" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="572" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="602" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 真相之重</text>
+<rect x="340" y="622" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="622" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="652" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">堤坝下的真相</text>
+<text x="350" y="670" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，午后，暴雨间歇 · 德罗赫达镇外，博因河畔堤坝下方</text>
+<rect x="354" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 发现尸体</text>
+<rect x="445" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 辨认尸体</text>
+<rect x="535" y="692" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="692" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="722" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 真相浮现</text>
+<rect x="340" y="742" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="742" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="772" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">卡文迪什的房间</text>
+<text x="350" y="790" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，夜晚 · 德罗赫达庄园内，卡文迪什上校的私人房间</text>
+<rect x="354" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入上校的私室</text>
+<rect x="445" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 罐中的低语</text>
+<rect x="535" y="812" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="812" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="842" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 真相的低语</text>
+<rect x="340" y="862" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="862" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="892" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">森林中的祭祀场地</text>
+<text x="350" y="910" font-size="10" fill="#5C5345" font-family="sans-serif">1649 年 9 月，暴雨间歇的阴沉午后 · 德罗赫达以东数英里，茂</text>
+<rect x="354" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 踏入被遗忘的石阵</text>
+<rect x="445" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 缪楚的召唤仪式</text>
+<rect x="535" y="932" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="932" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="962" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 血与火的终局</text>
+<rect x="340" y="982" width="300" height="62" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="340" y="982" width="300" height="5" fill="#E8620C"/>
+<text x="350" y="1012" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">最后的对决</text>
+<text x="350" y="1030" font-size="10" fill="#5C5345" font-family="sans-serif">1649年9月，夜晚，暴雨将至前的阴云密布时刻 · 德罗赫达以东几英</text>
+<rect x="354" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="354" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="364" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#1 赶到祭祀场地</text>
+<rect x="445" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="445" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="455" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#2 缪楚的献祭开始</text>
+<rect x="535" y="1052" width="87" height="40" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
+<rect x="535" y="1052" width="87" height="5" fill="#6B7A55"/>
+<text x="545" y="1082" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">#3 最终对决</text>
 <text x="676" y="86" font-size="13" font-weight="800" fill="#3E4A5A">NPC（3）</text>
 <rect x="676" y="96" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="96" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="126" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Raven</text>
-<text x="686" y="144" font-size="10" fill="#5C5345" font-family="sans-serif">Vengeful Ghost、Gambler</text>
+<text x="686" y="126" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">亨利·巴斯托</text>
+<text x="686" y="144" font-size="10" fill="#5C5345" font-family="sans-serif">老兵向导</text>
 <rect x="676" y="130" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="130" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="160" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Marauder</text>
-<text x="686" y="178" font-size="10" fill="#5C5345" font-family="sans-serif">Vigilante、Violent</text>
+<text x="686" y="160" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">卢卡斯·丹布劳</text>
+<text x="686" y="178" font-size="10" fill="#5C5345" font-family="sans-serif">博学医者</text>
 <rect x="676" y="164" width="200" height="28" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="164" width="200" height="5" fill="#3E4A5A"/>
-<text x="686" y="194" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">Vendetta</text>
-<text x="686" y="212" font-size="10" fill="#5C5345" font-family="sans-serif">Outsider、Mercenary</text>
+<text x="686" y="194" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">托马斯·奥达菲</text>
+<text x="686" y="212" font-size="10" fill="#5C5345" font-family="sans-serif">敌意仓库管理员</text>
 <text x="676" y="208" font-size="13" font-weight="800" fill="#4A3B28">线索（2）</text>
 <rect x="676" y="220" width="200" height="24" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="220" width="200" height="5" fill="#4A3B28"/>
-<text x="686" y="250" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">恶名昭彰：深渊中的挑战者的关键线索</text>
+<text x="686" y="250" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">血雨腥风的关键线索</text>
 <rect x="676" y="250" width="200" height="24" rx="6" fill="#FAF6EF" stroke="#E5DCC8" stroke-width="1"/>
 <rect x="676" y="250" width="200" height="5" fill="#4A3B28"/>
-<text x="686" y="280" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">深渊的秘密：面对与被面对的关键线索</text>
+<text x="686" y="280" font-size="13" font-weight="700" fill="#2B2620" font-family="Century Gothic, sans-serif">蛇之低语的关键线索</text>
 </svg>

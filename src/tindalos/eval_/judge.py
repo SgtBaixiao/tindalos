@@ -97,9 +97,10 @@ def _default_client(settings: Settings) -> Callable[[list[dict]], str]:
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
         }).encode("utf-8")
-        req = urllib.request.Request(
-            url, data=body, headers={"Content-Type": "application/json"}
-        )
+        headers = {"Content-Type": "application/json"}
+        if settings.api_key:  # 云端 API（DeepSeek/Kimi/GLM/Qwen 等）需 Bearer 头（2026-08-11 接入）
+            headers["Authorization"] = f"Bearer {settings.api_key}"
+        req = urllib.request.Request(url, data=body, headers=headers)
         with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 —— 用户配置的本地端点
             data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
