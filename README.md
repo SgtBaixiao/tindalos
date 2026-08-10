@@ -35,6 +35,34 @@ KP 主控 ──► 解析模组 → 拟定幕结构 ──► NPC 并行注入�
 | API | stdlib http.server SSE（零依赖） | `tindalos serve` 实时进度流 + 局部重生成 |
 | 质量 | Docker 加固沙箱 + G0–G7 门管线 + 双轴评审 | 234 后端 + 74 前端测试全绿，零网络零 LLM 可复现 |
 
+## 云端 API 模式（推荐 · 非本地模型）
+
+用任一**国产云端大模型 API** 驱动生成（DeepSeek 主选；Kimi/GLM/Qwen/SiliconFlow 均可——OpenAI 兼容端点）：
+
+```bash
+# 环境变量（三件套）
+export TINDALOS_API_KEY=sk-...                    # DeepSeek 等云端 key
+export TINDALOS_API_BASE=https://api.deepseek.com/v1   # 任意 OpenAI 兼容端点
+export TINDALOS_MODEL=deepseek-chat                # kimi-k3 / glm-4-plus / qwen-plus ...
+
+# 一键本地全流程（PDF/模组 → 结构化 → 生成 → eval → evolve → 记忆）
+bash scripts/run-module.sh "留地不留头.pdf" data/output
+```
+
+> **本地运行原则**：所有 LLM/API 工作流在本机执行（`bash scripts/run-module.sh`）；GitHub Actions 仅跑**纯离线**确定性回归（pytest/vitest/smoke，零 API 零网络）——不依赖任何云端工作流。
+
+**选型表**（Tindalos 客户端 = OpenAI 兼容 `/chat/completions`，换端点即换模型）：
+
+| 提供商 | base_url | 模型 | 说明 |
+|---|---|---|---|
+| **DeepSeek**（实测 ✅） | `https://api.deepseek.com/v1` | `deepseek-chat` / `deepseek-reasoner` | 国产、性价比高、结构化输出稳——**当前默认** |
+| Moonshot Kimi | `https://api.moonshot.cn/v1` | `kimi-k3`（524K 上下文） | 求职目标公司；超大上下文 |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` | 国产老牌 |
+| 通义 Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | 阿里 |
+| SiliconFlow | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` 等 | 聚合平台 |
+
+**模组全文注入**（loop 迭代改进）：LLM 生成时自动把模组正文（截断至 `TINDALOS_LLM_CONTEXT`，默认 16000 字符）作为背景注入 prompt——剧本真正基于模组内容（幕名/地点/NPC/事件都取自模组），而非只依赖首段前提。
+
 ## 快速开始
 
 ```bash
@@ -61,6 +89,20 @@ cd frontend && npm ci && npm run dev
 ```
 
 测试：`python -m pytest tests/ -q`（234 后端，无网络沙箱）· `cd frontend && npx vitest run`（74 前端）· CI 见 `.github/workflows/`。
+
+## 实验结果（真实模组《留地不留头》To Hell or Connaught）
+
+用 1649 爱尔兰克苏鲁模组 PDF（20 页 / 23.6K 字符）跑全流程的对比：
+
+| 生成器 | 幕 | 场景 | 事件 | 确定性 eval | LLM judge | 内容质量 |
+|---|---|---|---|---|---|---|
+| Deterministic（离线模板） | 2 | 4 | 12 | 5.0 | — | 模板化（第I幕·初现端倪），不含模组内容 |
+| 本地 qwen2.5:3b | 2 | 4 | 12 | 4.5 | — | 部分真实（NPC 名），scene 级频繁降级 |
+| **云端 DeepSeek-chat + 全文注入** | 2 | **16** | **48** | **5.0** | **4.5**（playability 4） | **真实模组内容**（德罗赫达陷落史实、蛇人德鲁伊缪楚、旧印、NPC 背景全来自模组） |
+
+- **LLM judge**（DeepSeek 当裁判）对 48 事件剧本给 playability 4——比确定性规则更严格，正是三层 verifier 的意义（确定性 > LLM-judge > 人工）。
+- **数据管道**：`PDF → PyMuPDF 提取 → DeepSeek 结构化整理（organize_module.py）→ 生成`——模组原始叙述归位为 元信息/背景/时间线/地点(10)/NPC/事件链/线索/检定清单。
+- 全部在**本地**运行（bash scripts/run-module.sh），不依赖 GitHub 工作流。
 
 ## 开发
 
@@ -163,6 +205,8 @@ Tindalos 用一条完整链路回答：LangGraph 多智能体编排（KP 主控 
 2. **离线确定性可测是设计铁律**：`Generator` 协议（Deterministic 离线 / Ollama 可选）——全部 140 个测试零网络零 LLM，在无网络加固沙箱内跑；LLM 失败按设计降级（根因告警带 HTTP 状态码，不吞栈）。
 3. **eval 不是脚本，是闭环**：4 维 rubric（结构/一致性/深度/可玩性，1-5 锚点）+ 确定性检查清单（schema 合法/id 唯一/引用可解析/KG 无矛盾…）+ LLM-judge 可选降级 + **失败源归因四类**（structure/data/model/evaluation）；`evolve` 把建议变成确定性修复（注册悬空 NPC/重生成空场景/失效重叠关系/补线索链接），loop_log 记录每轮 applied/delta/evidence，收敛提前终止、幂等。
 4. **开发过程本身就是自进化的实证**：本仓库经 harness 门管线构建（G0–G7），双轴评审抓到并修复 6+ 处测试没覆盖的真实缺陷（含默认 checkpointer 崩溃、重叠永久关系窗、事件 id 无限循环、退役模型 410 假成功）——180+ 测试全绿。
+5. **国产云端 LLM API 接入**（2026-08-11）：OpenAI 兼容客户端泛化（base_url + Bearer key 一键换端点），实测 DeepSeek deepseek-chat 驱动真实模组《留地不留头》——16 场景 / 48 事件、eval 5.0、LLM judge 4.5（比确定性规则更严格的裁判）；Kimi K3（524K 上下文）已配置可直切。
+6. **真实模组数据管道**：PDF → 文本提取 → 云端 LLM 结构化整理（organize_module.py：元信息/背景/时间线/10 地点/NPC/事件链/线索/检定清单）→ 生成；模组全文注入让剧本真正基于模组内容（德罗赫达陷落史实、蛇人德鲁伊缪楚、旧印）。
 
 **面试可追问的答案**（深挖弹药）：
 
