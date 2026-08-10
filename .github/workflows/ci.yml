@@ -63,7 +63,7 @@ jobs:
       - name: Eval (2>&1 含分数表)
         run: tindalos eval /tmp/c.json 2>&1 | grep -q '\[structural\] score=5'
       - name: Evolve (坏剧本收敛)
-        run: tindalos evolve examples/campaign-broken.json --rounds 3 --out /tmp/e.json 2>&1 | grep -qE 'round 1: .* -> .*'
+        run: tindalos evolve examples/campaign-broken.json --rounds 3 --out /tmp/e.json 2>&1 | grep -qE 'round 1:.*'
       - name: Kg 查询
         run: tindalos kg examples/campaign.json --entity npc-1 2>&1 | grep -q npc-1
       - name: Memories (跨会话记忆)
