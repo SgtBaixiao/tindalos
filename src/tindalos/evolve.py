@@ -92,7 +92,7 @@ def _coerce_type(t: Any) -> Any:
     return t
 
 
-from tindalos.models import construct_loose_campaign as _construct_loose
+from tindalos.models import construct_loose_campaign as _construct_loose, normalize_relation_types
 
 
 def _coerce_campaign(campaign: Any) -> tuple[Campaign, str]:
@@ -106,7 +106,7 @@ def _coerce_campaign(campaign: Any) -> tuple[Campaign, str]:
         return campaign.model_copy(deep=True), ""
     if isinstance(campaign, dict):
         try:
-            return Campaign.model_validate(campaign), ""
+            return Campaign.model_validate(normalize_relation_types(campaign)), ""
         except ValidationError as e:
             err_text = str(e) if str(e) else "Unknown ValidationError"
             return _construct_loose(campaign), "\n".join(err_text.splitlines()[:3])

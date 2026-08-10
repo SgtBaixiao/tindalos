@@ -41,7 +41,7 @@ def _first_error_msg(e: ValidationError) -> str:
     return f"{loc}: {msg}" if loc else msg
 
 
-from tindalos.models import construct_loose_campaign as _construct_loose
+from tindalos.models import construct_loose_campaign as _construct_loose, normalize_relation_types
 
 
 def _coerce_campaign(campaign: Any) -> tuple[Optional[Campaign], str]:
@@ -50,7 +50,7 @@ def _coerce_campaign(campaign: Any) -> tuple[Optional[Campaign], str]:
         return campaign, ""
     if isinstance(campaign, dict):
         try:
-            return Campaign.model_validate(campaign), ""
+            return Campaign.model_validate(normalize_relation_types(campaign)), ""
         except ValidationError as e:
             err = _first_error_msg(e)
             try:

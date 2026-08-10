@@ -310,6 +310,31 @@ __all__ = [
 ]
 
 
+RELATION_TYPE_ALIASES = {
+    "KNOWS": "认识", "POINTS_TO": "指向", "CAUSES": "起因",
+    "BELONGS_TO": "归属", "LEARNS": "获知", "EXPIRES": "失效",
+}
+
+
+def normalize_relation_types(campaign_dict: dict) -> dict:
+    """把 relations[].type 的英文枚举/任意大小写归一化为 RelationType 中文值（深拷贝，不就地改）。
+
+    统一入口：eval/evolve/cli 在边界处先归一化再校验，保证坏输入也能对齐领域语言
+    （英文 KNOWS 与中文 认识 在重叠检测/一致性检查中视为同一关系）。
+    """
+    out = dict(campaign_dict)
+    rels = list(out.get("relations", []) or [])
+    norm = []
+    for r in rels:
+        r2 = dict(r)
+        t = r2.get("type")
+        if isinstance(t, str) and t not in ("认识", "指向", "起因", "归属", "获知", "失效"):
+            r2["type"] = RELATION_TYPE_ALIASES.get(t.upper(), t)
+        norm.append(r2)
+    out["relations"] = norm
+    return out
+
+
 def construct_loose_campaign(raw: dict) -> "Campaign":
     """宽松构造（model_construct 跳过校验）：schema 校验失败的 dict 也能继续跑结构检查。
 
@@ -357,6 +382,7 @@ def construct_loose_campaign(raw: dict) -> "Campaign":
         )
         for c in raw.get("clues", [])
     ]
+    raw = normalize_relation_types(raw)
     relations = [
         WorldRelation.model_construct(
             source=r.get("source", ""), target=r.get("target", ""), type=r.get("type"),

@@ -427,3 +427,7 @@ def kg_command(
 
 
 __all__ = ["app", "render_notes"]
+
+
+if __name__ == "__main__":
+    app()

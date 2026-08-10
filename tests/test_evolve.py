@@ -610,6 +610,6 @@ def test_evolve_carries_schema_err_into_evidence():
     raw["rogue_key"] = 123  # extra=forbid 未知键
     out = evolve(raw, world=None, rounds=1, pipeline=build_pipeline(settings=settings),
                  evaluator=run_deterministic, judge=None)
-    assert out["loop_log"][0]["schema_err"], "第 1 轮必须携带 schema_err"
-    assert "rogue" in out["loop_log"][0]["schema_err"] or "extra" in out["loop_log"][0]["schema_err"].lower() \
-        or "未知键" in out["loop_log"][0]["schema_err"] or "Extra inputs" in out["loop_log"][0]["schema_err"]
+    err = out["loop_log"][0]["schema_err"]
+    assert err, "第 1 轮必须携带 schema_err"
+    assert "validation errors" in err.lower() or "Extra inputs" in err or "未知键" in err

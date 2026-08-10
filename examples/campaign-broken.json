@@ -1,0 +1,310 @@
+{
+  "id": "campaign-61403a39",
+  "title": "模组《雾港之夜》",
+  "premise": "雾港之夜",
+  "acts": [
+    {
+      "id": "act-1",
+      "title": "第I幕·初现端倪",
+      "roman": "I",
+      "summary": "围绕「雾港之夜」的第I幕：初现端倪。",
+      "scenes": [
+        {
+          "id": "act-1-scene-1",
+          "title": "场景·初现端倪其一",
+          "setting": {
+            "time": "清晨",
+            "place": "古董店"
+          },
+          "events": [
+            {
+              "id": "act-1-scene-1-ev-1",
+              "title": "抵达现场",
+              "kind": "entry",
+              "description": "众人于清晨抵达古董店，气氛异样。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-1-scene-1-ev-2",
+                "act-1-scene-1-ev-3"
+              ]
+            },
+            {
+              "id": "act-1-scene-1-ev-2",
+              "title": "发现线索",
+              "kind": "trigger",
+              "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-1-scene-1-ev-3"
+              ]
+            },
+            {
+              "id": "act-1-scene-1-ev-3",
+              "title": "事态升级",
+              "kind": "outcome",
+              "description": "真相浮出水面，局面失控，幕在此收束。",
+              "conditions": [],
+              "next_event_ids": []
+            }
+          ],
+          "npc_ids": [
+            "npc-1",
+            "npc-3",
+            "npc-99"
+          ]
+        },
+        {
+          "id": "act-1-scene-2",
+          "title": "场景·初现端倪其二",
+          "setting": {
+            "time": "清晨",
+            "place": "古董店"
+          },
+          "events": [
+            {
+              "id": "act-1-scene-2-ev-1",
+              "title": "抵达现场",
+              "kind": "entry",
+              "description": "众人于清晨抵达古董店，气氛异样。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-1-scene-2-ev-2",
+                "act-1-scene-2-ev-3"
+              ]
+            },
+            {
+              "id": "act-1-scene-2-ev-2",
+              "title": "发现线索",
+              "kind": "trigger",
+              "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-1-scene-2-ev-3"
+              ]
+            },
+            {
+              "id": "act-1-scene-2-ev-3",
+              "title": "事态升级",
+              "kind": "outcome",
+              "description": "真相浮出水面，局面失控，幕在此收束。",
+              "conditions": [],
+              "next_event_ids": []
+            }
+          ],
+          "npc_ids": [
+            "npc-1",
+            "npc-3"
+          ]
+        },
+        {
+          "id": "scene-empty",
+          "title": "空场景",
+          "setting": {
+            "time": "夜",
+            "place": "灯塔"
+          },
+          "events": [],
+          "npc_ids": []
+        }
+      ],
+      "npc_ids": [
+        "npc-1",
+        "npc-3"
+      ]
+    },
+    {
+      "id": "act-2",
+      "title": "第II幕·深入漩涡",
+      "roman": "II",
+      "summary": "围绕「雾港之夜」的第II幕：深入漩涡。",
+      "scenes": [
+        {
+          "id": "act-2-scene-1",
+          "title": "场景·深入漩涡其一",
+          "setting": {
+            "time": "傍晚",
+            "place": "废弃码头"
+          },
+          "events": [
+            {
+              "id": "act-2-scene-1-ev-1",
+              "title": "抵达现场",
+              "kind": "entry",
+              "description": "众人于傍晚抵达废弃码头，气氛异样。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-2-scene-1-ev-2",
+                "act-2-scene-1-ev-3"
+              ]
+            },
+            {
+              "id": "act-2-scene-1-ev-2",
+              "title": "发现线索",
+              "kind": "trigger",
+              "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-2-scene-1-ev-3"
+              ]
+            },
+            {
+              "id": "act-2-scene-1-ev-3",
+              "title": "事态升级",
+              "kind": "outcome",
+              "description": "真相浮出水面，局面失控，幕在此收束。",
+              "conditions": [],
+              "next_event_ids": []
+            }
+          ],
+          "npc_ids": [
+            "npc-2"
+          ]
+        },
+        {
+          "id": "act-2-scene-2",
+          "title": "场景·深入漩涡其二",
+          "setting": {
+            "time": "深夜",
+            "place": "废弃码头"
+          },
+          "events": [
+            {
+              "id": "act-2-scene-2-ev-1",
+              "title": "抵达现场",
+              "kind": "entry",
+              "description": "众人于深夜抵达废弃码头，气氛异样。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-2-scene-2-ev-2",
+                "act-2-scene-2-ev-3"
+              ]
+            },
+            {
+              "id": "act-2-scene-2-ev-2",
+              "title": "发现线索",
+              "kind": "trigger",
+              "description": "场景中发现与传闻相符的痕迹，指向更深的秘密。",
+              "conditions": [],
+              "next_event_ids": [
+                "act-2-scene-2-ev-3"
+              ]
+            },
+            {
+              "id": "act-2-scene-2-ev-3",
+              "title": "事态升级",
+              "kind": "outcome",
+              "description": "真相浮出水面，局面失控，幕在此收束。",
+              "conditions": [],
+              "next_event_ids": []
+            }
+          ],
+          "npc_ids": [
+            "npc-2"
+          ]
+        }
+      ],
+      "npc_ids": [
+        "npc-2"
+      ]
+    }
+  ],
+  "npcs": {
+    "npc-1": {
+      "id": "npc-1",
+      "name": "顾长歌",
+      "archetype": "调查员",
+      "personality": [
+        "冲动鲁莽",
+        "古道热肠"
+      ],
+      "description": "顾长歌是调查员，与「雾港之夜」的传闻有所牵连。",
+      "acts_roles": {}
+    },
+    "npc-2": {
+      "id": "npc-2",
+      "name": "苏晚晴",
+      "archetype": "记者",
+      "personality": [
+        "神经质",
+        "谨慎多疑"
+      ],
+      "description": "苏晚晴是记者，与「雾港之夜」的传闻有所牵连。",
+      "acts_roles": {}
+    },
+    "npc-3": {
+      "id": "npc-3",
+      "name": "赵远山",
+      "archetype": "药剂师",
+      "personality": [
+        "神经质",
+        "古道热肠"
+      ],
+      "description": "赵远山是药剂师，与「雾港之夜」的传闻有所牵连。",
+      "acts_roles": {}
+    }
+  },
+  "clues": [
+    {
+      "id": "clue-act-1",
+      "name": "第I幕·初现端倪的关键线索",
+      "description": "指向本幕真相的关键线索。",
+      "linked_npc_ids": [
+        "npc-1"
+      ],
+      "linked_event_ids": [
+        "act-1-scene-1-ev-3"
+      ],
+      "found_at": null
+    },
+    {
+      "id": "clue-act-2",
+      "name": "第II幕·深入漩涡的关键线索",
+      "description": "指向本幕真相的关键线索。",
+      "linked_npc_ids": [
+        "npc-2"
+      ],
+      "linked_event_ids": [
+        "act-2-scene-1-ev-3"
+      ],
+      "found_at": null
+    }
+  ],
+  "relations": [
+    {
+      "source": "npc-1",
+      "target": "clue-act-1",
+      "type": "指向",
+      "label": "指向线索",
+      "valid_from": "1900-01-01",
+      "valid_to": null,
+      "note": null
+    },
+    {
+      "source": "npc-1",
+      "target": "npc-2",
+      "type": "认识",
+      "label": "互相认识",
+      "valid_from": "1900-01-01",
+      "valid_to": null,
+      "note": null
+    },
+    {
+      "source": "npc-2",
+      "target": "clue-act-2",
+      "type": "指向",
+      "label": "指向线索",
+      "valid_from": "1900-01-01",
+      "valid_to": null,
+      "note": null
+    },
+    {
+      "source": "npc-1",
+      "target": "npc-2",
+      "type": "KNOWS",
+      "label": "认识",
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "note": "永久窗（与既有重叠）"
+    }
+  ]
+}
