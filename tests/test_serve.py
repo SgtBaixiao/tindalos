@@ -391,3 +391,13 @@ def test_serve_module_stdlib_only_imports():
         if s.startswith("import ") or s.startswith("from "):
             mod = s.split()[1].split(".")[0]
             assert mod == "tindalos" or mod in sys.stdlib_module_names, f"非 stdlib 导入: {line}"
+
+
+def test_options_preflight_cors():
+    """回归：OPTIONS preflight 必须返回 204 + CORS 头（前端跨域 POST 依赖，G5 修正）。"""
+    state = ServeState(generate=_fake_generate([], dict(FAKE_CAMPAIGN)))
+    status, headers, _body = _run(state, "OPTIONS", "/api/generate", b"")
+    assert " 204 " in status or status.endswith(" 204")
+    assert headers.get("access-control-allow-origin") == "*"
+    assert "POST" in headers.get("access-control-allow-methods", "")
+    assert headers.get("access-control-allow-headers") == "Content-Type"

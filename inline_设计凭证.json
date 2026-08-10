@@ -5,14 +5,14 @@
   "granted": true,
   "derived_from_gates": [
     {
-      "taskId": "t11-serve",
+      "taskId": "t13-frontend-live",
       "gates": [
         "g1",
         "g2"
       ]
     },
     {
-      "taskId": "t12-regenerate",
+      "taskId": "t14-memory",
       "gates": [
         "g1",
         "g2"
@@ -28,22 +28,22 @@
   "gate_refs": [
     {
       "gate": "g1",
-      "taskId": "t11-serve",
+      "taskId": "t13-frontend-live",
       "status": "pass"
     },
     {
       "gate": "g2",
-      "taskId": "t11-serve",
+      "taskId": "t13-frontend-live",
       "status": "pass"
     },
     {
       "gate": "g1",
-      "taskId": "t12-regenerate",
+      "taskId": "t14-memory",
       "status": "pass"
     },
     {
       "gate": "g2",
-      "taskId": "t12-regenerate",
+      "taskId": "t14-memory",
       "status": "pass"
     },
     {
@@ -53,6 +53,6 @@
     }
   ],
   "plan_ticket": "inline",
-  "generatedAt": "2026-08-10T07:53:41.825Z",
+  "generatedAt": "2026-08-10T08:20:03.671Z",
   "note": "本凭证由 gateLog 派生（hasCredential），非手工签发；过期判定以 gateLog 为准。"
 }

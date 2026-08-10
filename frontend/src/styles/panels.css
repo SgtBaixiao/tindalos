@@ -141,6 +141,17 @@
   border-top: 1px solid var(--t-line);
 }
 
+/* 重生成失败提示 */
+.tn-drawer__err {
+  margin: 0;
+  padding: 8px 16px 12px;
+  color: var(--t-rule-red);
+  font-family: var(--t-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
 /* --- 表单 --- */
 .tn-field {
   display: flex;
@@ -359,6 +370,37 @@
 @keyframes tn-blink {
   to {
     visibility: hidden;
+  }
+}
+
+/* 实时模式徽标（live=1 EventSource 连通时显示） */
+.tn-progress__live {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--t-rule-red);
+  background-color: rgba(214, 69, 69, 0.08);
+  color: var(--t-rule-red);
+  font-family: var(--t-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.tn-progress__live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--t-rule-red);
+  animation: tn-blink 1.2s steps(2, start) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tn-progress__live::before {
+    animation: none;
   }
 }
 

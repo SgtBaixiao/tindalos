@@ -11,8 +11,9 @@
         → act_fanout（Send 并行）→ write_act×M（每幕：@task 并行写场景）
         → compose（汇总 models.Campaign + 备团笔记 markdown + store 事实写入）→ END
 
-基础设施：checkpoint=SqliteSaver（settings.checkpoint_dir 文件）；store=InMemoryStore
-（namespace ('campaigns', campaign_id, 'facts')）；进度经 get_stream_writer 发 custom 事件。
+基础设施：checkpoint=SqliteSaver（settings.checkpoint_dir 文件）；store=build_store(settings)
+（settings.store_dir 可写 → SqliteStore 落盘跨会话，否则 InMemoryStore；namespace
+('campaigns', campaign_id, 'facts')）；进度经 get_stream_writer 发 custom 事件。
 全程确定性：DeterministicGenerator 下零网络零 LLM。
 """
 
@@ -32,12 +33,12 @@ from langgraph.config import get_store, get_stream_writer
 from langgraph.func import task
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import InjectedState, ToolNode
-from langgraph.store.memory import InMemoryStore
 from langgraph.types import Send
 
 from tindalos.config import Settings, get_settings
 from tindalos.generator import Generator, build_generator
 from tindalos.kg import WorldGraph, build_from_campaign
+from tindalos.memory import build_store, render_memory_section, write_memory_facts
 from tindalos.models import Act, Campaign, Clue, NPC, WorldRelation
 
 # 缺省分幕/NPC 数量（可经 TINDALOS_N_ACTS / TINDALOS_N_NPCS 环境变量覆盖）
@@ -335,7 +336,8 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
         return {"acts": [act], "progress": [f"写作第 {idx} 幕"]}
 
     def compose(state: PipelineState) -> dict:
-        """汇总：公共 compose_campaign 装配 Campaign + store 事实写入（t10 去重复）。"""
+        """汇总：公共 compose_campaign 装配 Campaign + store 事实写入
+        （relations/campaign 既有键 + write_memory_facts 记忆事实，t10/t14）。"""
         writer = get_stream_writer()
         writer({"progress": "校对付印"})
         assembled = compose_campaign(
@@ -347,16 +349,20 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
         campaign = assembled["campaign"]
         store = get_store()
         if store is not None:
-            store.put(
-                ("campaigns", campaign.id, "facts"),
-                "relations",
-                {"items": [r.model_dump(mode="json") for r in campaign.relations]},
-            )
-            store.put(
-                ("campaigns", campaign.id, "facts"),
-                "campaign",
-                campaign.model_dump(mode="json"),
-            )
+            try:
+                store.put(
+                    ("campaigns", campaign.id, "facts"),
+                    "relations",
+                    {"items": [r.model_dump(mode="json") for r in campaign.relations]},
+                )
+                store.put(
+                    ("campaigns", campaign.id, "facts"),
+                    "campaign",
+                    campaign.model_dump(mode="json"),
+                )
+                write_memory_facts(store, campaign)
+            except Exception as mem_err:  # noqa: BLE001 - store 写失败不阻塞生成（G5 修正）
+                writer({"progress": f"记忆持久化失败（已跳过）：{mem_err}"})
         return {
             "campaign": campaign,
             "notes_md": assembled["notes_md"],
@@ -446,8 +452,9 @@ def compose_campaign(module_text: str, premise: str, acts: list[dict], npcs: dic
 
 
 def render_notes(campaign: Campaign) -> str:
-    """备团笔记 markdown：前提 / 幕（场景+事件）/ NPC 一览 / 世界关系。
+    """备团笔记 markdown：前提 / 幕（场景+事件）/ NPC 一览 / 世界关系 / 记忆（t14）。
 
+    记忆节经 render_memory_section 派生（NPC 印象 / 关键事件 / 世界状态摘要，KP 续备团用）。
     宽松容错分支（t10 去重复）：scene.setting / npc.personality / npc.acts_roles
     缺失或为空、relation.type 非枚举时仍可渲染（供 cli.notes 输入容错路径复用）。
     """
@@ -478,7 +485,7 @@ def render_notes(campaign: Campaign) -> str:
             lines.append(f"- {rel.source} --[{typ}]--> {rel.target}（{rel.label}）")
     else:
         lines.append("（无）")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n\n" + render_memory_section(campaign)
 
 
 def _route_after_kp(state: PipelineState) -> str:
@@ -504,11 +511,12 @@ def build_pipeline(
     - settings：配置（缺省 get_settings()）；
     - generator：生成器（缺省按 settings.llm_enabled 构造）；
     - checkpointer：SqliteSaver（缺省用 settings.checkpoint_dir/checkpoints.sqlite）；
-    - store：InMemoryStore（缺省新建，命名空间 ('campaigns', <campaign_id>, 'facts')）。
+    - store：缺省 build_store(settings)——settings.store_dir 可写时 SqliteStore 落盘
+      （跨会话记忆），否则 InMemoryStore；命名空间 ('campaigns', <campaign_id>, 'facts')。
     """
     settings = settings or get_settings()
     generator = generator or build_generator(settings)
-    store = store if store is not None else InMemoryStore()
+    store = store if store is not None else build_store(settings)
     if checkpointer is None:
         # from_conn_string 是 @contextmanager，不可 next() 取值；
         # 直接 sqlite3.connect + SqliteSaver(conn)（check_same_thread=False 供并行分支共用）。
@@ -579,6 +587,7 @@ def run_pipeline(
 __all__ = [
     "PipelineState",
     "kg_query",
+    "build_store",
     "campaign_id_for",
     "extract_premise",
     "title_from_text",

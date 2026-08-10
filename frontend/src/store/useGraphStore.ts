@@ -50,9 +50,12 @@ export type GraphState = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedId: string | null;
+  campaignId: string | null;
   past: Snapshot[];
-  /** 载入整图（初次渲染 / 重新布局 / 后端全量重建）。 */
-  loadGraph: (nodes: GraphNode[], edges: GraphEdge[]) => void;
+  /** 载入整图（初次渲染 / 重新布局 / 后端全量重建）；campaignId 一并记录（重生成按钮用）。 */
+  loadGraph: (nodes: GraphNode[], edges: GraphEdge[], campaignId?: string | null) => void;
+  /** 设置/更新当前 campaign id（live SSE 结束帧写入，供 NodeDrawer 重生成）。 */
+  setCampaignId: (id: string | null) => void;
   /** React Flow onNodesChange 入口（拖拽位移等，不进 undo 历史）。 */
   onNodesChange: (changes: NodeChangeLike[]) => void;
   setNodes: (nodes: GraphNode[]) => void;
@@ -71,10 +74,13 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
   nodes: [],
   edges: [],
   selectedId: null,
+  campaignId: null,
   past: [],
 
-  loadGraph: (nodes, edges) =>
-    set({ nodes, edges, selectedId: null, past: [] }),
+  loadGraph: (nodes, edges, campaignId = null) =>
+    set({ nodes, edges, selectedId: null, past: [], campaignId }),
+
+  setCampaignId: (id) => set({ campaignId: id }),
 
   onNodesChange: (changes) =>
     set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),

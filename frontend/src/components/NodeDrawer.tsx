@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
+import { fetchRegenerate, isLive, patchGraphFromCampaign } from '../lib/live';
 
 /**
  * NodeDrawer：右侧滑出详情面板（点击节点打开）。
  * - 标题/描述为本地 state 编辑，保存时写入 store（产生 undo 快照）
- * - 「重生成」占位按钮（标记生成中；真实局部再生待后端契约）
+ * - 「重生成」按钮：live（?live=1）时 POST /api/regenerate → patch store 节点
+ *   data + edges（单点真相：剧本 JSON → buildScriptGraph 重建）；离线置灰 + tooltip
  * - Esc 关闭；空选择时渲染 null（画布上下文不丢失）
  */
 export function NodeDrawer() {
@@ -13,6 +15,12 @@ export function NodeDrawer() {
   const selectNode = useGraphStore((s) => s.selectNode);
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const regenerateNode = useGraphStore((s) => s.regenerateNode);
+  const setEdges = useGraphStore((s) => s.setEdges);
+  const campaignId = useGraphStore((s) => s.campaignId);
+
+  const liveMode = useMemo(() => isLive(), []);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const node = useMemo(
     () => nodes.find((n) => n.id === selectedId) ?? null,
@@ -49,6 +57,27 @@ export function NodeDrawer() {
   const save = () => {
     updateNodeData(node.id, isNpc ? { name: title, description } : { title, description, time, place });
   };
+
+  /** 重生成：live → fetchRegenerate(campaignId, nodeId) → patch 节点 data + edges。 */
+  const onRegenerate = async () => {
+    if (!node || !liveMode || !campaignId) return;
+    setRegenerating(true);
+    setRegenerateError(null);
+    regenerateNode(node.id); // 视觉态：生成中
+    try {
+      const { campaign } = await fetchRegenerate(campaignId, node.id);
+      const { nodeData, edges } = patchGraphFromCampaign(campaign, node.id);
+      updateNodeData(node.id, { ...nodeData, status: undefined }); // 清除「生成中」视觉态（G5 修正）
+      setEdges(edges);
+    } catch (err) {
+      setRegenerateError(err instanceof Error ? err.message : String(err));
+      updateNodeData(node.id, { status: '失败' });
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const offline = !liveMode || !campaignId;
 
   return (
     <aside className={`tn-drawer${selectedId ? ' tn-drawer--open' : ''}`} aria-label="节点详情">
@@ -125,12 +154,18 @@ export function NodeDrawer() {
         <button
           type="button"
           className="tn-btn"
-          onClick={() => regenerateNode(node.id)}
-          title="占位：真实局部重生成待后端契约"
+          onClick={() => void onRegenerate()}
+          disabled={offline || regenerating}
+          title={offline ? '需 tindalos serve' : regenerating ? '生成中…' : '重新生成此节点（POST /api/regenerate）'}
         >
-          重生成
+          {regenerating ? '重生成中…' : '重生成'}
         </button>
       </div>
+      {regenerateError && (
+        <p className="tn-drawer__err" role="alert">
+          重生成失败：{regenerateError}
+        </p>
+      )}
     </aside>
   );
 }

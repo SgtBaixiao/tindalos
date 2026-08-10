@@ -1,8 +1,8 @@
-"""Typer CLI（task t7-cli）：`tindalos` 七命令族。
+"""Typer CLI（task t7-cli）：`tindalos` 八命令族。
 
 入口 `app` 经 pyproject `[project.scripts] tindalos = "tindalos.cli:app"` 暴露。
 
-七命令：
+八命令：
   ① generate  模组文本（.md/.json）→ campaign JSON + 同目录 notes.md 备团笔记
               （默认 DeterministicGenerator；`--llm` 且 settings.llm_enabled 时用 OllamaGenerator）
   ② notes     campaign JSON → 重生成备团笔记 markdown
@@ -12,6 +12,8 @@
   ⑥ serve     HTTP API 服务：POST /api/generate（SSE）· GET /api/campaigns/<id> · POST /api/regenerate
   ⑦ regenerate campaign JSON → 单节点重生成（scene/event/npc/clue），其余保持不动
               （--node 必填；校验失败回滚原样；--llm 且 settings.llm_enabled 时用 OllamaGenerator）
+  ⑧ memories  campaign id（或 campaign JSON 路径）→ 列出跨会话记忆事实
+              （NPC 印象 / 关键事件 / 世界状态摘要；读 settings.store_dir 落盘 store）
 
 契约：成功退出码 0；输入文件缺失 / JSON 解析失败 / 实体未知 → 非 0 退出码，错误打到 stderr。
 全程确定性（零网络零 LLM）：--llm/--judge 仅在 TINDALOS_LLM_ENABLED=1 时生效，否则回退。
@@ -157,6 +159,18 @@ def _generate_campaign(
 # ---------------------------------------------------------------- 展示
 
 
+def _resolve_campaign_id(campaign: str) -> str:
+    """memories 参数解析：campaign JSON 路径 → 其 id；否则按 campaign id 直用。"""
+    p = Path(campaign)
+    if p.exists() and p.is_file():
+        doc = _load_campaign_json(p)
+        cid = doc.get("id")
+        if not cid:
+            raise ValueError(f"campaign JSON 缺少 id: {p}")
+        return str(cid)
+    return campaign
+
+
 def _print_eval_report(report: dict, to_stderr: bool = False) -> None:
     """4 维分数表 + 归因 + 建议（人类可读）。"""
     echo = lambda s: typer.echo(s, err=to_stderr)  # noqa: E731
@@ -206,7 +220,16 @@ def generate(
         campaign = _generate_campaign(generator, module_text, premise)
         _write_json(campaign.model_dump(mode="json"), out)
         notes_path = Path(out).parent / "notes.md"
-        notes_path.write_text(render_notes(campaign), encoding="utf-8")
+        notes_text = render_notes(campaign)
+        # 跨会话记忆：写入持久化 store（settings.store_dir 可写时落盘 SqliteStore）；
+        # 笔记记忆节由 render_notes 内置派生（memory.render_memory_section），此处不再重复追加
+        try:
+            from tindalos.memory import build_store, write_memory_facts
+
+            write_memory_facts(build_store(), campaign)
+        except Exception as mem_err:  # noqa: BLE001 - 记忆写入失败不阻塞生成主流程
+            typer.echo(f"注意：记忆写入失败（{mem_err}）", err=True)
+        notes_path.write_text(notes_text, encoding="utf-8")
         typer.echo(f"已生成 campaign：{out}")
         typer.echo(f"已生成备团笔记：{notes_path}")
     except (OSError, ValueError) as e:
@@ -354,6 +377,29 @@ def regenerate_command(
         for a in applied:
             typer.echo(f"[应用] {a}")
         typer.echo(f"重生成结果已写入：{out}")
+    except (OSError, ValueError) as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
+# ---------------------------------------------------------------- ⑧ memories
+
+
+@app.command(name="memories")
+def memories_command(
+    campaign: str = typer.Argument(..., help="campaign id（或 campaign JSON 路径）"),
+) -> None:
+    """⑧ 跨会话记忆：列出该 campaign 的已存记忆事实（NPC 印象 / 关键事件 / 世界状态摘要）。
+
+    读 settings.store_dir 落盘的 store（缺省 data/store/memory.sqlite）；
+    无事实时输出「暂无」提示（退出码 0）。
+    """
+    try:
+        from tindalos.memory import build_store, list_memories
+
+        store = build_store(get_settings())
+        cid = _resolve_campaign_id(campaign)
+        typer.echo(list_memories(store, cid))
     except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e

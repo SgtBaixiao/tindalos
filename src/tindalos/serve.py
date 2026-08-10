@@ -144,17 +144,25 @@ class TindalosHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         self.wfile.flush()
 
+    MAX_BODY = 1_048_576  # 1MB 上限：防 slow-loris/超大 body 挂起请求线程
+
     def _read_json_body(self) -> dict | None:
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except (TypeError, ValueError):
             return None
-        if length <= 0:
+        if length <= 0 or length > self.MAX_BODY:
             return None
         raw = self.rfile.read(length)
         try:
             doc = json.loads(raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except UnicodeDecodeError:
+            # Windows curl/cmd 常以 GBK 发送中文 body：回退 gbk（评审修正）
+            try:
+                doc = json.loads(raw.decode("gbk"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return None
+        except json.JSONDecodeError:
             return None
         return doc if isinstance(doc, dict) else None
 
@@ -162,11 +170,22 @@ class TindalosHandler(BaseHTTPRequestHandler):
         self.wfile.write(sse_frame(payload))
         self.wfile.flush()
 
+    # -- OPTIONS（CORS preflight：浏览器非 simple 请求先发 OPTIONS，缺了会被 501 拒） --
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
     def _sse_headers(self) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        # HTTP/1.0 + 无 Content-Length 时，body 必须以连接关闭定界；SSE 单发，EventSource 自带重连
+        self.send_header("Connection", "close")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.flush()

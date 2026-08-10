@@ -12,12 +12,8 @@ import '@xyflow/react/dist/style.css';
 import './theme.css';
 import './styles/nodes.css';
 import './styles/panels.css';
-import {
-  buildScriptGraph,
-  layoutGraph,
-  NODE_TYPE_COLORS,
-  positionsAreFinite,
-} from './lib/scriptGraph';
+import { buildScriptGraph, layoutGraph, NODE_TYPE_COLORS, positionsAreFinite } from './lib/scriptGraph';
+import { getCampaignIdFromQuery, isLive, loadCampaign } from './lib/live';
 import type { CampaignView, EdgeKind, GraphEdge, GraphNode } from './lib/types';
 import { useGraphStore } from './store/useGraphStore';
 import { nodeTypes } from './components/nodes';
@@ -64,19 +60,18 @@ export default function App() {
     localStorage.setItem('tindalos-theme', theme);
   }, [theme]);
 
-  // 载入 public/campaign.json → 映射 → dagre 布局 → 入 store
+  // 载入 campaign → 映射 → dagre 布局 → 入 store
+  // live（?live=1&campaign=<id>）：GET /api/campaigns/<id>；API 失败回退静态
+  // public/campaign.json；离线（无 live 参数）直接读静态
   useEffect(() => {
     let alive = true;
-    fetch(`${import.meta.env.BASE_URL}campaign.json`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((json) => {
-        const campaign = (json.campaign ?? json) as CampaignView;
+    const liveMode = isLive();
+    const campaignId = getCampaignIdFromQuery();
+    loadCampaign(liveMode, campaignId)
+      .then((campaign) => {
         const { nodes: mapped, edges } = buildScriptGraph(campaign);
         const laid = layoutGraph(mapped, edges);
-        if (alive) loadGraph(laid, edges);
+        if (alive) loadGraph(laid, edges, campaign.id);
       })
       .catch((err: unknown) => {
         if (alive) setLoadError(err instanceof Error ? err.message : String(err));
@@ -169,7 +164,7 @@ export default function App() {
         )}
         {loadError && (
           <div className="tn-canvas__warn" role="status">
-            载入失败：{loadError}（请确认 public/campaign.json 存在）
+            载入失败：{loadError}（离线请确认 public/campaign.json 存在；live 请确认 tindalos serve 已起）
           </div>
         )}
 
