@@ -15,19 +15,7 @@ from typing import Any, Optional
 
 import networkx as nx
 
-try:
-    from tindalos.models import RelationType  # t2 产物；并行落地竞态下用本地等价枚举兜底
-except Exception:  # pragma: no cover - ImportError/SyntaxError 均视为 models 未就绪
-    from enum import Enum
-
-    class RelationType(str, Enum):  # type: ignore[no-redef]
-        KNOWS = "认识"
-        POINTS_TO = "指向"
-        CAUSES = "起因"
-        BELONGS_TO = "归属"
-        LEARNS = "获知"
-        EXPIRES = "失效"
-
+from tindalos.models import RelationType
 _TYPE_BY_NAME: dict[str, str] = {m.name: m.value for m in RelationType}
 _LABELS: frozenset[str] = frozenset(m.value for m in RelationType)
 

@@ -108,6 +108,7 @@ class Act(BaseModel):
 
 
 class Campaign(BaseModel):
+    """剧本聚合根。extra=forbid：eval 的 schema 合法检查需要检出未知键漂移。"""
     """剧本：Campaign→Act→Scene→Event 层级 + NPC 注册表 + 线索 + 世界知识图谱边。
 
     校验（跨层 id 唯一性与引用可解析，仅此两类规则）：
@@ -117,7 +118,7 @@ class Campaign(BaseModel):
     - npc.acts_roles 的幕 id 必须存在。
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     title: str

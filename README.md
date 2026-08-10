@@ -19,7 +19,7 @@ python -m pytest tests/ -q
 python -c "import sys; sys.path.insert(0, 'src'); import tindalos; print(tindalos.__version__)"
 ```
 
-> `sitecustomize.py` 让仓库根目录下的脚本/模块运行（`python xxx.py`、`python -m pytest`）免安装直接 import src 布局包；`python -c` 因解释器启动时序不加载 cwd 下的 sitecustomize，需显式加入 `src`。
+> pytest 通过 `tests/conftest.py` 自动把 `src/` 加入 `sys.path`（src 布局，免安装）；`python -c` 不加载 conftest，需显式 `PYTHONPATH=src`。
 
 ## 求职叙事
 
