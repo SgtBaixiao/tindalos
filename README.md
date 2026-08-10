@@ -1,13 +1,66 @@
 # Tindalos
 
-克苏鲁 TRPG 备团系统：KP 主控 → 自适应 NPC 生成 → 分幕剧本 → 备团笔记 → 剧本节点图。
+克苏鲁 TRPG 备团系统：**KP 主控 → 自适应 NPC 并行生成 → 分幕剧本 → 备团笔记 → 剧本节点图交互编辑**；内置 **eval + 自进化闭环**。
+
+[![CI](https://github.com/SgtBaixiao/tindalos/actions/workflows/ci.yml/badge.svg)](https://github.com/SgtBaixiao/tindalos/actions/workflows/ci.yml)
+[![GitHub Pages](https://img.shields.io/badge/demo-live-orange)](https://sgtbaixiao.github.io/tindalos/)
+![Python](https://img.shields.io/badge/python-3.12+-blue)
+![Tests](https://img.shields.io/badge/tests-234%20backend%20%2B%2074%20frontend-green)
+![License](https://img.shields.io/badge/license-MIT-yellow)
+
+**▶ 在线演示**：[sgtbaixiao.github.io/tindalos](https://sgtbaixiao.github.io/tindalos)（剧本节点图 · 点击节点 → 抽屉编辑 · 生成进度带 · 暖墨深色板）
+
+```
+KP 主控 ──► 解析模组 → 拟定幕结构 ──► NPC 并行注入人格（Send）──► 每幕子图写作 ──► 校对付印
+              │  ▲                                    │
+              │  └─ kg_query 工具（Function Calling）  │
+              └─────────────────────────────────────────┘
+                                        │
+                          campaign.json（剧本）+ notes.md（备团笔记）+ memory.sqlite（跨会话记忆）
+                                        │
+                          React Flow 剧本节点图（前端 · SSE 实时进度流 · 局部重生成）
+```
+
+![剧本结构预览](examples/preview.svg)
 
 ## 技术栈
 
-- **LangGraph** — 多智能体管线编排（StateGraph 主图 + Send 并行扇出 + SqliteSaver checkpoint + InMemoryStore）
-- **NetworkX** — 世界知识图谱（六类语义边 + 时间窗推理 + 多跳路径线索推理）
-- **Pydantic v2** — 领域模型与跨层校验（Campaign → Act → Scene → Event 层级 + NPC/Clue/关系）
-- **Typer** — CLI 入口（`tindalos` 命令，由 `src/tindalos/cli.py` 提供）
+| 层 | 选型 | 为什么 |
+|---|---|---|
+| 多智能体编排 | **LangGraph**（StateGraph + Send/@task + SqliteSaver checkpoint + Store） | supervisor 官方弃维护；确定性编排 + 并行扇出更贴 KP→NPC 拓扑 |
+| 世界知识图谱 | **NetworkX**（六类语义边 + 时间窗 + 多跳） | Kuzu 已弃维护；数百节点不需要图数据库（工程判断力） |
+| 领域模型 | **Pydantic v2**（Campaign→Act→Scene→Event + NPC/Clue/关系，extra=forbid） | 跨层引用校验 + schema 漂移可检出 |
+| eval + 自进化 | 4 维 rubric + 确定性检查 + LLM-judge 降级 + 归因四类 + evolve 循环 | 分数可复现、修复白名单、收敛幂等（3.2→5.0） |
+| 前端 | React 19 + Vite + @xyflow/react v12 + dagre + zustand | 唯一开箱即交互编辑 + 深度可定制 + React 原生 |
+| API | stdlib http.server SSE（零依赖） | `tindalos serve` 实时进度流 + 局部重生成 |
+| 质量 | Docker 加固沙箱 + G0–G7 门管线 + 双轴评审 | 234 后端 + 74 前端测试全绿，零网络零 LLM 可复现 |
+
+## 快速开始
+
+```bash
+pip install -e ".[dev,llm]"
+
+# ① 生成剧本（离线确定性，零 LLM）
+tindalos generate examples/sample-module.md --out campaign.json
+# ② 备团笔记（含「记忆」节，KP 跨会话续备团）
+tindalos notes campaign.json --out notes.md
+# ③ 评估（4 维分数 + 失败源归因）
+tindalos eval campaign.json
+# ④ 自进化（eval → 确定性修复 → 复评；坏剧本 3.2→5.0）
+tindalos evolve examples/campaign-broken.json --rounds 3 --out evolved.json
+# ⑤ 知识图谱查询（实体关系 / 多跳线索推理）
+tindalos kg campaign.json --entity npc-1 --path-to clue-act-1
+# ⑥ 实时服务（SSE 进度流 + 局部重生成 API）
+tindalos serve --port 8347
+# ⑦ 跨会话记忆
+tindalos memories campaign.json
+
+# 前端（实时演示）
+cd frontend && npm ci && npm run dev
+# 前端实时模式（连 serve：?live=1 时进度流 + 重生成按钮可用）
+```
+
+测试：`python -m pytest tests/ -q`（234 后端，无网络沙箱）· `cd frontend && npx vitest run`（74 前端）· CI 见 `.github/workflows/`。
 
 ## 开发
 
