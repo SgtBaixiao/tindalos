@@ -22,6 +22,8 @@ export type EdgeKind = 'flow' | 'branch' | 'reference';
 export type ActData = {
   title: string;
   summary: string;
+  /** drawer 编辑写 description；节点渲染优先 description，缺省回退 summary（G5 契约修复） */
+  description?: string;
   roman?: string;
   sceneCount: number;
 };
