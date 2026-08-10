@@ -26,7 +26,7 @@ class Settings:
     )
     # LangGraph SqliteSaver checkpoint 目录
     checkpoint_dir: Path = field(default_factory=lambda: Path("data/checkpoints"))
-    # LangGraph InMemoryStore 持久化目录
+    # 预留 store 持久化目录（当前 store 为 InMemoryStore，未消费此字段）
     store_dir: Path = field(default_factory=lambda: Path("data/store"))
 
 

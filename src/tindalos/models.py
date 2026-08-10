@@ -108,8 +108,7 @@ class Act(BaseModel):
 
 
 class Campaign(BaseModel):
-    """剧本聚合根。extra=forbid：eval 的 schema 合法检查需要检出未知键漂移。"""
-    """剧本：Campaign→Act→Scene→Event 层级 + NPC 注册表 + 线索 + 世界知识图谱边。
+    """剧本聚合根。extra=forbid：eval 的 schema 合法检查需要检出未知键漂移。
 
     校验（跨层 id 唯一性与引用可解析，仅此两类规则）：
     - acts 内 scene/event id 跨幕全局唯一；
