@@ -375,15 +375,14 @@ def _strip_ansi(s: str) -> str:
 
 
 def test_serve_subcommand_help():
-    # 参数级断言（终端/rich 版本无关，CI 渲染差异不破坏测试）：
-    cmd = app.typer_instance.get_command(None, "serve")
-    assert cmd is not None, "serve 子命令未注册"
-    opts = {n for p in cmd.get_params(None) for n in p.opts}
-    assert "--host" in opts and "--port" in opts
-    # 帮助文本出口码 + 含默认端口（ANSI 剥离后，容 CI rich 差异）
+    # 注册检查（终端/rich 版本无关）：
+    names = {c.name for c in app.registered_commands}
+    assert "serve" in names, f"serve 未注册: {names}"
+    # 帮助文本：ANSI 剥离后含默认端口与 host/port 说明（容 CI rich 渲染差异）
     r = runner.invoke(app, ["serve", "--help"])
     assert r.exit_code == 0, r.stdout
-    assert "8347" in _strip_ansi(r.stdout)
+    clean = _strip_ansi(r.stdout).lower()
+    assert "8347" in clean and "host" in clean and "port" in clean
 
 
 def test_serve_subcommand_registered_in_help():
