@@ -20,6 +20,12 @@ import { parseProgressEvents, type ProgressEvent } from './progress';
 /** SSE 生成流入口（ProgressBand live 模式连接地址）。 */
 export const GENERATE_SSE_URL = '/api/generate';
 
+/**
+ * live 模式缺省模组文本：无工作台输入时的演示兜底。
+ * 走确定性生成（llm=false），保证离线/无密钥也能实时看到 SSE 进度流。
+ */
+export const DEMO_MODULE_TEXT = '雾港之夜';
+
 /** 重生成请求超时：30s（与后端整链生成时长对齐的量级）。 */
 export const REGENERATE_TIMEOUT_MS = 30_000;
 
@@ -114,6 +120,44 @@ export class SseStreamParser {
       sep = this.buffer.indexOf('\n\n');
     }
     return frames;
+  }
+}
+
+/**
+ * fetchGenerateStream：POST /api/generate → 逐帧异步迭代 SSE 生成流。
+ * - body={module_text, llm}（服务端契约：data:{stage,message} → data:{done:true,campaign}）；
+ * - 响应体用 ReadableStream + TextDecoder（跨 chunk UTF-8 续接）+ SseStreamParser（半帧续接）解析；
+ * - 非 2xx → 抛服务端 error 文本（或 HTTP 状态）；响应无 body → 抛契约错误；
+ * - 流由服务端在 done 帧后 close；调用方可用 AbortController.signal 主动取消。
+ */
+export async function* fetchGenerateStream(
+  moduleText: string,
+  opts: { llm?: boolean; signal?: AbortSignal } = {},
+): AsyncGenerator<SseFrame> {
+  const res = await fetch(GENERATE_SSE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ module_text: moduleText, llm: opts.llm ?? false }),
+    signal: opts.signal,
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    throw new Error(typeof data?.error === 'string' ? data.error : `HTTP ${res.status}`);
+  }
+  if (!res.body) throw new Error('浏览器不支持响应流（ReadableStream）');
+  const parser = new SseStreamParser();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+      yield frame;
+    }
+  }
+  // 尾部冲刷：TextDecoder 残留字节（理论极少，SSE 帧恒以 \n\n 收尾）
+  for (const frame of parser.push(decoder.decode())) {
+    yield frame;
   }
 }
 

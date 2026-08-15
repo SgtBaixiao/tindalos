@@ -6,6 +6,13 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   base: './',
+  // dev proxy：/api/* 转发到 serve.py（tindalos serve --port 8347），前端 dev 与后端同源。
+  // 仅 vite dev 生效，不影响 build / vitest。生产由反向代理或同源部署承担同职。
+  server: {
+    proxy: {
+      '/api': 'http://127.0.0.1:8347',
+    },
+  },
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.ts'],

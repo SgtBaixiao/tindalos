@@ -2,23 +2,31 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type ProgressEvent } from '../lib/progress';
 import { usePrefersReducedMotion, useTypewriter } from '../lib/hooks';
 import {
-  GENERATE_SSE_URL,
+  DEMO_MODULE_TEXT,
+  fetchGenerateStream,
   fetchStaticProgress,
   isLive,
-  parseSSEEvent,
   sseToProgressEvent,
-  type SseFrame,
 } from '../lib/live';
 import { useGraphStore } from '../store/useGraphStore';
 
 /**
  * ProgressBand：底部进度带 —— 多智能体工作流可视化（AI 产品差异点）。
- * - ?live=1：EventSource 连 API /api/generate 实时渲染（SSE data:{stage,message}
- *   → data:{done:true,campaign}）；断开 / 错误帧 → 回退静态 public/progress.jsonl
+ * - ?live=1：fetch POST /api/generate 读 SSE 流（data:{stage,message}
+ *   → data:{done:true,campaign}）实时渲染；连接失败 / 非 2xx / 错误帧 / 流异常
+ *   → 回退静态 public/progress.jsonl
+ * - moduleText：生成用的模组文本（01 工作台传入）；缺省用 DEMO_MODULE_TEXT
+ *   确定性生成，保证离线 / 无密钥也能实时看到进度流
  * - 离线（无 live 参数）：直接读静态 progress.jsonl（示例进度事件）
  * - KP 主控步骤时间线 + NPC 小胶囊列 + 打字机滚动（reduced-motion 静止）
  */
-export function ProgressBand({ live }: { live?: boolean }) {
+export function ProgressBand({
+  live,
+  moduleText,
+}: {
+  live?: boolean;
+  moduleText?: string;
+}) {
   const liveMode = live ?? isLive();
   const setCampaignId = useGraphStore((s) => s.setCampaignId);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
@@ -39,58 +47,49 @@ export function ProgressBand({ live }: { live?: boolean }) {
     }
   }, []);
 
-  // live=1：EventSource 实时流；断开/错误帧回退静态
+  // live=1：fetch POST /api/generate 流式 SSE；连接失败/非 2xx/错误帧/流异常 → 回退静态
   useEffect(() => {
     if (!liveMode) return;
+    const controller = new AbortController();
     let alive = true;
-    let finished = false;
-    const es = new EventSource(GENERATE_SSE_URL);
-
-    const teardown = () => {
-      finished = true;
-      es.close();
-    };
-
-    es.onopen = () => {
-      if (!alive || finished) return;
-      setEvents([]);
-      setLoading(false);
-      setMode('live');
-    };
-
-    es.onmessage = (ev: MessageEvent) => {
-      if (!alive || finished) return;
-      let frame: SseFrame | null = null;
+    (async () => {
       try {
-        frame = parseSSEEvent(ev.data);
+        const text = moduleText?.trim() || DEMO_MODULE_TEXT;
+        setEvents([]);
+        let started = false;
+        for await (const frame of fetchGenerateStream(text, {
+          signal: controller.signal,
+        })) {
+          if (!alive) return;
+          if (!started) {
+            started = true;
+            setLoading(false);
+            setMode('live');
+          }
+          if (frame.kind === 'progress') {
+            setEvents((prev) => [...prev, sseToProgressEvent(frame)]);
+          } else if (frame.kind === 'done') {
+            if (frame.campaign?.id) setCampaignId(frame.campaign.id);
+            setLoading(false);
+            setMode('done');
+            return;
+          } else if (frame.kind === 'error') {
+            void loadStatic(); // 错误帧 → 回退静态
+            return;
+          }
+        }
+        // 流结束但无 done 帧 → 回退静态
+        if (alive) void loadStatic();
       } catch {
-        frame = null; // 坏帧丢弃（后端契约外的数据）
+        // 连接失败 / 非 2xx / 坏流 → 回退静态
+        if (alive) void loadStatic();
       }
-      if (!frame) return;
-      if (frame.kind === 'progress') {
-        setEvents((prev) => [...prev, sseToProgressEvent(frame)]);
-      } else if (frame.kind === 'done') {
-        teardown();
-        if (frame.campaign?.id) setCampaignId(frame.campaign.id);
-        setLoading(false);
-        setMode('done');
-      } else if (frame.kind === 'error') {
-        teardown();
-        void loadStatic(); // 错误帧 → 回退静态
-      }
-    };
-
-    es.onerror = () => {
-      if (!alive || finished) return;
-      teardown();
-      void loadStatic(); // 断开 → 回退静态
-    };
-
+    })();
     return () => {
       alive = false;
-      es.close();
+      controller.abort();
     };
-  }, [liveMode, loadStatic, setCampaignId]);
+  }, [liveMode, moduleText, loadStatic, setCampaignId]);
 
   // 离线：直接静态加载
   useEffect(() => {

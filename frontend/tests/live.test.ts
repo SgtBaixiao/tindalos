@@ -1,17 +1,20 @@
 /**
  * live.test.ts —— 前端三期「实时」验收（t13）：
  * ① parseSSEEvent（帧/错误/截断）+ fetchRegenerate（POST /api/regenerate，30s 超时）
- * ② ProgressBand live=1 EventSource 实时渲染、断开/错误回退静态 progress.jsonl
+ * ② ProgressBand live=1 fetch POST /api/generate 流式渲染、失败/错误回退静态 progress.jsonl
  * ③ NodeDrawer「重生成」按钮：live 调 fetchRegenerate → patch store 节点 data+edges
  * ④ App live 时 GET /api/campaigns/<id>，离线 public/campaign.json（loadCampaign 决策）
+ * ⑤ fetchGenerateStream（transport）：fetch POST + ReadableStream 逐帧解析（半帧/多帧/done/非2xx）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, createElement } from 'react';
 import {
+  DEMO_MODULE_TEXT,
   GENERATE_SSE_URL,
   SseStreamParser,
   campaignSourceUrl,
+  fetchGenerateStream,
   fetchRegenerate,
   getCampaignIdFromQuery,
   isLive,
@@ -19,6 +22,7 @@ import {
   parseSSEEvent,
   patchGraphFromCampaign,
   sseToProgressEvent,
+  type SseFrame,
 } from '../src/lib/live';
 import { ProgressBand } from '../src/components/ProgressBand';
 import { NodeDrawer } from '../src/components/NodeDrawer';
@@ -401,30 +405,59 @@ describe('重生成 store 补丁（patchGraphFromCampaign + store）', () => {
 
 /* ---------------------------------------------------------------- ② ProgressBand */
 
-class FakeEventSource {
-  static instances: FakeEventSource[] = [];
-  url: string;
-  onopen: ((ev: Event) => void) | null = null;
-  onmessage: ((ev: MessageEvent<string>) => void) | null = null;
-  onerror: ((ev: Event) => void) | null = null;
-  closed = false;
+type FakeResponse = {
+  ok: boolean;
+  status: number;
+  body?: ReadableStream<Uint8Array>;
+  text?: () => Promise<string>;
+  json?: () => Promise<unknown>;
+};
 
-  constructor(url: string) {
-    this.url = url;
-    FakeEventSource.instances.push(this);
-  }
-  close(): void {
-    this.closed = true;
-  }
-  open(): void {
-    this.onopen?.(new Event('open'));
-  }
-  send(data: string): void {
-    this.onmessage?.({ data } as MessageEvent<string>);
-  }
-  fail(): void {
-    this.onerror?.(new Event('error'));
-  }
+/** SSE 流式响应：chunks 逐段 enqueue（可测半帧续接 / 多帧一冲）。 */
+function sseStreamResponse(chunks: string[]): FakeResponse {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(encoder.encode(c));
+      controller.close();
+    },
+  });
+  return { ok: true, status: 200, body };
+}
+
+const STATIC_PROGRESS_LINE =
+  '{"ts":"t","agent":"kp","step":"读取模组","text":"静态回退内容"}\n';
+
+/** 契约格式 SSE 帧：`data:{json}\n\n`（与 serve.py sse_frame 一致）。 */
+function sseData(payload: unknown): string {
+  return `data:${JSON.stringify(payload)}\n\n`;
+}
+
+/**
+ * 可控开放 SSE 流：模拟真实 serve.py —— 流保持开启、逐帧 push、
+ * 最后由调用方 finish() 关闭（未 finish 前不会触发「流结束→回退」）。
+ */
+function sseOpenStream(): {
+  response: FakeResponse;
+  push(payload: unknown): void;
+  finish(): void;
+} {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
+  return {
+    response: { ok: true, status: 200, body },
+    push(payload) {
+      controller.enqueue(encoder.encode(sseData(payload)));
+    },
+    finish() {
+      controller.close();
+    },
+  };
 }
 
 function stubBrowserApi(opts: { reducedMotion?: boolean } = {}): void {
@@ -438,17 +471,47 @@ function stubBrowserApi(opts: { reducedMotion?: boolean } = {}): void {
   );
 }
 
-describe('ProgressBand（live=1 EventSource，断开/错误回退静态）', () => {
+/**
+ * 按 URL 路由的 fetch mock：
+ *  - /api/generate → generate()（默认空流；传 generate 抛错可模拟连接失败）
+ *  - progress.jsonl → 静态 progress 文本
+ *  - 其余 → 404
+ */
+function routeFetch(opts: {
+  generate?: () => Promise<FakeResponse>;
+  staticText?: string;
+}): ReturnType<typeof vi.fn> {
+  const generate = opts.generate ?? (() => Promise.resolve(sseStreamResponse([])));
+  const staticText = opts.staticText ?? STATIC_PROGRESS_LINE;
+  return vi.fn((input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes('/api/generate')) return generate();
+    if (url.includes('progress.jsonl'))
+      return Promise.resolve({ ok: true, status: 200, text: async () => staticText });
+    return Promise.resolve({ ok: false, status: 404, text: async () => '' });
+  });
+}
+
+/** 渲染 + 等流式读取消化（同一 act 内，所有 setState 都被包裹）。 */
+async function renderProgressBand(
+  root: Root,
+  props: { live?: boolean; moduleText?: string },
+): Promise<void> {
+  await act(async () => {
+    root.render(createElement(ProgressBand, props));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+describe('ProgressBand（live=1 fetch POST /api/generate 流式；失败/错误回退静态）', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    FakeEventSource.instances = [];
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     stubBrowserApi();
-    vi.stubGlobal('fetch', vi.fn());
     history.replaceState({}, '', '/');
   });
 
@@ -460,97 +523,200 @@ describe('ProgressBand（live=1 EventSource，断开/错误回退静态）', () 
     vi.unstubAllGlobals();
   });
 
-  it('live=1：EventSource 连 /api/generate，进度帧实时渲染', async () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
+  it('live=1：fetch POST /api/generate，进度帧实时渲染', async () => {
+    const stream = sseOpenStream();
+    const fetchMock = routeFetch({ generate: () => Promise.resolve(stream.response) });
+    vi.stubGlobal('fetch', fetchMock);
     await act(async () => {
-      root.render(createElement(ProgressBand, { live: true }));
+      root.render(createElement(ProgressBand, { live: true, moduleText: '雾港之夜' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0].url).toBe(GENERATE_SSE_URL);
-    const es = FakeEventSource.instances[0];
+    expect(fetchMock).toHaveBeenCalledWith(
+      GENERATE_SSE_URL,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({ module_text: '雾港之夜', llm: false });
 
-    await act(async () => es.open());
-    expect(container.textContent).not.toContain('雾从港口');
-
-    await act(async () => es.send(JSON.stringify({ stage: 'plan', message: '拟定幕结构' })));
+    // 流持续开放，逐帧送达 → 实时渲染（未 done 前不落静态）
+    await act(async () => {
+      stream.push({ stage: 'plan', message: '拟定幕结构' });
+      stream.push({ stage: 'npc', message: 'NPC 顾长歌 · 注入人格' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(container.textContent).toContain('拟定幕结构');
     expect(container.textContent).toContain('实时');
-
-    await act(async () =>
-      es.send(JSON.stringify({ stage: 'npc', message: 'NPC 顾长歌 · 注入人格' })),
-    );
     expect(container.textContent).toContain('顾长歌');
-  });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('progress.jsonl'),
+      expect.anything(),
+    );
 
-  it('结束帧 data:{done:true,campaign} → 收尾并记录 campaignId，不再回退', async () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    // 服务端 finally 发 done 并关闭 → 收尾记录 campaignId，不回退
     await act(async () => {
-      root.render(createElement(ProgressBand, { live: true }));
+      stream.push({ done: true, campaign: { id: 'campaign-9' } });
+      stream.finish();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    const es = FakeEventSource.instances[0];
-    await act(async () => es.open());
-    await act(async () => es.send(JSON.stringify({ done: true, campaign: { id: 'campaign-9' } })));
-    expect(es.closed).toBe(true);
     expect(useGraphStore.getState().campaignId).toBe('campaign-9');
-    // 结束后再断开 → 不回退静态
-    await act(async () => es.fail());
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('progress.jsonl'),
+      expect.anything(),
+    );
   });
 
-  it('断开（onerror）→ 回退静态 progress.jsonl', async () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
-    // reduced-motion → 打字机直接全文（断言全文可见）
-    stubBrowserApi({ reducedMotion: true });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => '{"ts":"t","agent":"kp","step":"读取模组","text":"静态回退内容"}\n',
+  it('live 且无 moduleText → 用 DEMO_MODULE_TEXT 发起 POST', async () => {
+    const fetchMock = routeFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    await renderProgressBand(root, { live: true });
+    expect(fetchMock).toHaveBeenCalledWith(GENERATE_SSE_URL, expect.anything());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.module_text).toBe(DEMO_MODULE_TEXT);
+  });
+
+  it('结束帧 data:{done:true,campaign} → 记录 campaignId，不回退静态', async () => {
+    const fetchMock = routeFetch({
+      generate: () =>
+        Promise.resolve(
+          sseStreamResponse([sseData({ done: true, campaign: { id: 'campaign-9' } })]),
+        ),
     });
     vi.stubGlobal('fetch', fetchMock);
-    await act(async () => {
-      root.render(createElement(ProgressBand, { live: true }));
+    await renderProgressBand(root, { live: true });
+    expect(useGraphStore.getState().campaignId).toBe('campaign-9');
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('progress.jsonl'),
+      expect.anything(),
+    );
+  });
+
+  it('连接失败（fetch reject）→ 回退静态 progress.jsonl', async () => {
+    stubBrowserApi({ reducedMotion: true });
+    const fetchMock = routeFetch({
+      generate: async () => {
+        throw new Error('网络断开');
+      },
     });
-    const es = FakeEventSource.instances[0];
-    await act(async () => es.open());
-    await act(async () => es.fail());
+    vi.stubGlobal('fetch', fetchMock);
+    await renderProgressBand(root, { live: true });
+    expect(fetchMock).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}progress.jsonl`);
+    expect(container.textContent).toContain('静态回退内容');
+  });
+
+  it('HTTP 非 2xx（服务端 error）→ 回退静态 progress.jsonl', async () => {
+    stubBrowserApi({ reducedMotion: true });
+    const fetchMock = routeFetch({
+      generate: () =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({ error: 'module_text 必填字符串' }),
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await renderProgressBand(root, { live: true });
     expect(fetchMock).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}progress.jsonl`);
     expect(container.textContent).toContain('静态回退内容');
   });
 
   it('错误帧 data:{error} → 回退静态 progress.jsonl', async () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => '{"ts":"t","agent":"kp","step":"读取模组","text":"静态回退内容"}\n',
+    stubBrowserApi({ reducedMotion: true });
+    const fetchMock = routeFetch({
+      generate: () =>
+        Promise.resolve(sseStreamResponse([sseData({ error: '生成失败' })])),
     });
     vi.stubGlobal('fetch', fetchMock);
-    await act(async () => {
-      root.render(createElement(ProgressBand, { live: true }));
-    });
-    const es = FakeEventSource.instances[0];
-    await act(async () => es.open());
-    await act(async () => es.send(JSON.stringify({ error: '生成失败' })));
+    await renderProgressBand(root, { live: true });
     expect(fetchMock).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}progress.jsonl`);
+    expect(container.textContent).toContain('静态回退内容');
   });
 
-  it('非 live（离线）：直接读静态 progress.jsonl', async () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
+  it('非 live（离线）：直接读静态 progress.jsonl，不 POST', async () => {
     stubBrowserApi({ reducedMotion: true });
+    const fetchMock = routeFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    await renderProgressBand(root, {});
+    expect(fetchMock).not.toHaveBeenCalledWith(GENERATE_SSE_URL, expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}progress.jsonl`);
+    expect(container.textContent).toContain('静态回退内容');
+  });
+});
+
+/* ---------------------------------------------------------------- ⑤ fetchGenerateStream（transport） */
+
+async function collectStream(gen: AsyncGenerator<SseFrame>): Promise<SseFrame[]> {
+  const out: SseFrame[] = [];
+  for await (const f of gen) out.push(f);
+  return out;
+}
+
+describe('fetchGenerateStream：POST /api/generate 流式解析', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('POST body={module_text,llm:false}，一冲多帧按序产出', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseStreamResponse([
+        sseData({ stage: 'plan', message: '拟定幕结构' }) +
+          sseData({ stage: 'npc', message: 'NPC 顾长歌' }),
+      ]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const frames = await collectStream(fetchGenerateStream('雾港之夜'));
+    expect(fetchMock).toHaveBeenCalledWith(
+      GENERATE_SSE_URL,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({ module_text: '雾港之夜', llm: false });
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toMatchObject({ kind: 'progress', stage: 'plan' });
+    expect(frames[1]).toMatchObject({ kind: 'progress', stage: 'npc' });
+  });
+
+  it('llm:true 透传 body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(sseStreamResponse([]));
+    vi.stubGlobal('fetch', fetchMock);
+    await collectStream(fetchGenerateStream('x', { llm: true }));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({ module_text: 'x', llm: true });
+  });
+
+  it('半帧跨 chunk：缓冲续接后完整产出', async () => {
+    const frame = sseData({ stage: 'write', message: '写作幕内容' });
+    const half = Math.ceil(frame.length / 2);
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseStreamResponse([frame.slice(0, half), frame.slice(half)]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const frames = await collectStream(fetchGenerateStream('x'));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ kind: 'progress', stage: 'write', message: '写作幕内容' });
+  });
+
+  it('done 帧产出 campaign', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseStreamResponse([sseData({ done: true, campaign: { id: 'c-1' } })]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const frames = await collectStream(fetchGenerateStream('x'));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toEqual({ kind: 'done', campaign: expect.objectContaining({ id: 'c-1' }) });
+  });
+
+  it('HTTP 非 2xx + 服务端 error → 抛服务端消息', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => '{"ts":"t","agent":"kp","step":"读取模组","text":"静态进度"}\n',
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'module_text 必填字符串' }),
     });
     vi.stubGlobal('fetch', fetchMock);
-    await act(async () => {
-      root.render(createElement(ProgressBand));
-    });
-    expect(FakeEventSource.instances).toHaveLength(0); // 不建 EventSource
-    expect(fetchMock).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}progress.jsonl`);
-    expect(container.textContent).toContain('静态进度');
+    await expect(collectStream(fetchGenerateStream(''))).rejects.toThrow('module_text 必填字符串');
+  });
+
+  it('响应无 body → 抛契约错误', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(collectStream(fetchGenerateStream('x'))).rejects.toThrow('浏览器不支持响应流');
   });
 });
 
