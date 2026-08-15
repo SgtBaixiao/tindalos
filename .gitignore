@@ -22,3 +22,13 @@ artifacts/
 # 前端（t8-web）
 node_modules/
 frontend/node_modules/
+
+# 版权内容（不入库）：
+# - 第七版守秘人规则书 PDF（用户明确要求）
+# - references/sources/：规则书前 120 页 + 官方模组的原文提取（版权）
+# - 根目录模组 PDF / 神话译文 txt（官方模组与译文集，版权）
+references/sources/
+*吴老爷娶亲*
+*燃烧的星辰*.pdf
+克苏鲁神话*.txt
+克苏鲁的呼唤第七版守秘人规则书 1-1201.pdf

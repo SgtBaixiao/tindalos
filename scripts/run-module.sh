@@ -21,6 +21,8 @@ fi
 mkdir -p "$OUT"
 export TINDALOS_LLM_ENABLED=1
 export TINDALOS_LLM_CONTEXT="${TINDALOS_LLM_CONTEXT:-16000}"
+# 云端端点缺省 DeepSeek（与脚本头注释一致；显式导出使 config 不必再推断）
+export TINDALOS_API_BASE="${TINDALOS_API_BASE:-https://api.deepseek.com/v1}"
 export PYTHONIOENCODING=utf-8
 export PYTHONPATH=src
 

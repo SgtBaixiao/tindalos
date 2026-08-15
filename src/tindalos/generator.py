@@ -17,6 +17,7 @@ import random
 import re
 import time
 import warnings
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 import requests.exceptions as _rexc
@@ -267,12 +268,27 @@ class OllamaGenerator:
         self._fallback = DeterministicGenerator()
         self._module_context = ""
         self._module_title = ""
+        # 风格与设计规范（references/style-guide.md，源自守秘人规则书 + 官方模组）：
+        # 开关关闭或文件缺失时为空串 → _ctx 不注入，行为与旧版一致。
+        self._style_guide = self._load_style_guide()
         try:
             import requests  # 延迟导入：离线环境不强制依赖
 
             self._requests = requests
         except ImportError:  # pragma: no cover - requests 缺失时退化为确定性
             self._requests = None
+
+    def _load_style_guide(self) -> str:
+        """读取风格规范文件（截断至 6000 字符控制 token 成本）；不可用返回空串。"""
+        if not getattr(self.settings, "style_guide_enabled", False):
+            return ""
+        path: Path = getattr(self.settings, "style_guide_path", Path("references/style-guide.md")) or Path(
+            "references/style-guide.md"
+        )
+        try:
+            return path.read_text(encoding="utf-8")[:6000]
+        except OSError:  # 文件缺失/不可读：静默跳过，不影响生成
+            return ""
 
     # -- 模组上下文注入（loop 迭代改进，2026-08-11） ---------------
     def set_module_context(self, text: str, title: str = "") -> None:
@@ -282,11 +298,25 @@ class OllamaGenerator:
         self._module_context = text[:limit] if limit and text else (text if not limit else "")
 
     def _ctx(self) -> str:
-        """prompt 追加的模组背景块（未注入则空串）；在 _chat 层统一应用，覆盖所有生成 prompt。"""
-        if not self._module_context:
-            return ""
-        head = f"模组《{self._module_title}》背景资料（生成内容须忠实于以下背景）：\n" if self._module_title else "模组背景资料（生成内容须忠实于以下背景）：\n"
-        return "\n\n" + head + self._module_context
+        """prompt 追加的背景块（风格规范 + 模组背景；均为空则不注入）。
+
+        风格规范（洛氏恐怖风格 / KP 把控 / 剧情设计）在 _chat 层统一应用，
+        覆盖所有生成 prompt；模组背景紧随其后作为事实依据。
+        """
+        blocks: list[str] = []
+        if self._style_guide:
+            blocks.append(
+                "【Tindalos 风格与设计规范（生成剧本必须遵循；源自《克苏鲁的呼唤》第七版"
+                "守秘人规则书与官方模组《留地不留头》）】\n" + self._style_guide
+            )
+        if self._module_context:
+            head = (
+                f"模组《{self._module_title}》背景资料（生成内容须忠实于以下背景）：\n"
+                if self._module_title
+                else "模组背景资料（生成内容须忠实于以下背景）：\n"
+            )
+            blocks.append(head + self._module_context)
+        return "\n\n".join(blocks)
 
     # -- 底层对话 ------------------------------------------------
     def _chat(self, prompt: str, *, tools: list[dict] | None = None) -> str:

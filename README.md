@@ -148,6 +148,25 @@ tindalos kg campaign.json --entity npc-1 --path-to clue-act-1
 默认全程离线确定性（零网络零 LLM）；开启后 `generate --llm` 改用 Ollama（OpenAI 兼容
 `/chat/completions`）生成幕/NPC/场景草案，`eval --judge` 启用 LLM 裁判。
 
+### 风格与设计规范注入（默认开）
+
+生成时自动把 `references/style-guide.md`（浓缩自第七版守秘人规则书 + 官方模组
+《留地不留头》《吴老爷娶亲》《燃烧的星辰》）注入所有 LLM prompt——强化：
+
+- **任务把控**：KP 守则（导演式场景设计、冲突才检定、对手狡猾卑鄙、失败不卡死）；
+- **语言风格**：洛氏宇宙恐怖（感官压制、细节写实、克制留白、恐怖曲线、民俗恐怖变体）；
+- **剧情设计**：六段叙事骨架、时间表推进、线索呼应链、NPC 双层身份、检定格式、疯狂具体化。
+
+```bash
+export TINDALOS_STYLE_GUIDE=1            # 开关（默认 1；0 = 关闭，行为同旧版）
+export TINDALOS_STYLE_GUIDE_PATH=references/style-guide.md  # 自定义规范文件
+```
+
+详细参考（带原文出处，可追溯）：`references/kp-guidance.md`（把控）·
+`references/lovecraftian-style.md`（风格）· `references/scenario-design.md`（剧情）。
+注：`references/sources/`（规则书前 120 页 + 三个模组全文的原文提取）为版权内容，
+仅本地保留、不入库；style-guide 浓缩自其，已随仓库分发。
+
 ### 开启方式（环境变量）
 
 ```bash
