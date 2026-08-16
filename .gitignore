@@ -34,7 +34,9 @@ deploy/.env
 # - 第七版守秘人规则书 PDF（用户明确要求）
 # - references/sources/：规则书前 120 页 + 官方模组的原文提取（版权）
 # - 根目录模组 PDF / 神话译文 txt（官方模组与译文集，版权）
+# - mods/：本地模组素材库（官方模组 PDF/规则书/地图/预设卡，版权）
 references/sources/
+mods/
 *吴老爷娶亲*
 *燃烧的星辰*.pdf
 克苏鲁神话*.txt
