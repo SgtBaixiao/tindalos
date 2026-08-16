@@ -19,6 +19,10 @@ status.json
 .harness/
 artifacts/
 
+# 内部工作文件（开发期规划/票据/凭证，不入库）
+.scratch/
+/inline_设计凭证.json
+
 # 前端（t8-web）
 node_modules/
 frontend/node_modules/
