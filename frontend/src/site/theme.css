@@ -448,6 +448,61 @@ body {
   display: none;
 }
 
+/* ------------------------------------------------------------------
+ * 工作台嵌入站点的令牌统一（关键：让 Tindalos --t-* 层继承纸墨语言）
+ * .sx-workbench 包裹整个 <App/>，在此作用域把 --t-* 重映射到 --sx-*，
+ * 单页不再两套设计语言：暖墨克苏鲁令牌 → 纸墨极简（复刻 aicodingdictionary）。
+ * 纸/墨/线/缓动直接 var(--sx-*) 引用 → 自动随站点 dark 反转；
+ * 仅手挑的克制强调色需在 dark 下单独反转（见下方 [data-theme='dark'] 块）。
+ * 可读性硬指标：撤掉纸纹噪点，强调收敛为墨阶，分割线一律 hairline。
+ * ------------------------------------------------------------------ */
+.sx-workbench {
+  /* 纸墨基座（随站点 dark 自动反转） */
+  --t-paper: var(--sx-paper);
+  --t-paper-deep: var(--sx-paper-deep);
+  --t-ink: var(--sx-ink);
+  --t-ink-soft: var(--sx-ink-soft);
+  --t-ink-faint: var(--sx-ink-faint);
+  --t-line: var(--sx-line);
+  --t-ease: var(--sx-ease);
+
+  /* 凹陷表面：纸色微沉一档（light 手挑，dark 反转于下方块） */
+  --t-oldpaper: #efefec;
+  --t-parchment: #e6e6e3;
+  --t-paper-texture: none; /* 撤纸纹噪点 → 干净纸面，可读性优先 */
+
+  /* 强调收敛为墨阶（克制：类型区分靠低饱和色相，而非高亮原色） */
+  --t-orange: #6f6f6c;
+  --t-orange-deep: #3f3f3d;
+  --t-rule-red: var(--sx-ink);   /* 戏剧分割线 → 直接取墨 */
+  --t-verdigris: #5f7d6b;        /* 事件/环境：低饱和墨绿 */
+  --t-verdigris-deep: #4a6152;
+  --t-inkblue: #6d7289;          /* NPC：低饱和墨蓝 */
+  --t-sepia-ink: #6a604f;        /* 线索：低饱和墨棕 */
+
+  /* 阴影：墨色透明，非暖棕 */
+  --t-shadow-sm: 0 1px 3px var(--sx-shadow);
+  --t-shadow-md: 0 4px 14px var(--sx-shadow);
+  --t-shadow-lg: 0 8px 28px var(--sx-shadow-strong);
+
+  /* 字体跟随站点 */
+  --t-font-body: var(--sx-font-body);
+  --t-font-mono: var(--sx-font-mono);
+}
+
+/* 深色：仅反转手挑强调色（纸墨基座已由 var(--sx-*) 自动反转） */
+[data-theme='dark'] .sx-workbench {
+  --t-oldpaper: #232322;
+  --t-parchment: #2a2a28;
+  --t-orange: #a3a3a0;
+  --t-orange-deep: #c9c9c5;
+  --t-rule-red: var(--sx-ink);
+  --t-verdigris: #7d9c88;
+  --t-verdigris-deep: #9ab4a5;
+  --t-inkblue: #9aa1bd;
+  --t-sepia-ink: #b8ac96;
+}
+
 /* ---------- 资料库 Library ---------- */
 
 .sx-library {

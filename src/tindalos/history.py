@@ -31,12 +31,14 @@ def db_path() -> Path:
     """返回 SQLite 库路径。
 
     优先 ``TINDALOS_SITE_DB`` 环境变量（可绝对可相对）；缺省 ``data/site.db``
-    （相对仓库根，从本模块向上两级）。每次调用现读环境，便于测试 monkeypatch 覆盖。
+    （相对当前工作目录，与 web/rag/store 共用 ``TINDALOS_DATA_DIR`` 语义——
+    本地编辑安装 CWD=仓库根、容器内 CWD=/app 时都落在统一数据目录，卷挂载即持久化）。
+    每次调用现读环境，便于测试 monkeypatch 覆盖。
     """
     env = os.environ.get("TINDALOS_SITE_DB")
     if env:
         return Path(env)
-    return Path(__file__).resolve().parents[2] / "data" / "site.db"
+    return Path(os.environ.get("TINDALOS_DATA_DIR", "data")) / "site.db"
 
 
 def _connect() -> sqlite3.Connection:

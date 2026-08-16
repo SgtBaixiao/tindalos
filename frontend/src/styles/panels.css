@@ -10,7 +10,7 @@
   height: 48px;
   padding: 0 16px;
   background-color: var(--t-paper);
-  border-bottom: 2px solid var(--t-rule-red);
+  border-bottom: 1px solid var(--t-line);
   position: relative;
   z-index: 10;
 }
@@ -90,9 +90,8 @@
   display: flex;
   flex-direction: column;
   background-color: var(--t-paper-deep);
-  background-image: var(--t-paper-texture);
   border-left: 1px solid var(--t-line);
-  border-top: 3px solid var(--t-rule-red);
+  border-top: 1px solid var(--t-line);
   box-shadow: var(--t-shadow-lg);
   transform: translateX(105%);
   opacity: 0;
@@ -182,7 +181,7 @@
 .tn-field__input:focus {
   outline: none;
   border-color: var(--t-orange);
-  box-shadow: 0 0 0 2px rgba(232, 98, 12, 0.15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--t-orange) 15%, transparent);
 }
 .tn-field__textarea {
   resize: vertical;
@@ -204,7 +203,6 @@
 .tn-legend {
   position: relative;
   background-color: var(--t-paper-deep);
-  background-image: var(--t-paper-texture);
   border: 1px solid var(--t-line);
   border-radius: 10px;
   box-shadow: var(--t-shadow-md);
@@ -282,9 +280,8 @@
   transform: translateX(-50%);
   width: min(880px, calc(100vw - 40px));
   background-color: var(--t-oldpaper);
-  background-image: var(--t-paper-texture);
   border: 1px solid var(--t-line);
-  border-top: 3px solid var(--t-rule-red);
+  border-top: 1px solid var(--t-line);
   border-radius: 10px;
   box-shadow: var(--t-shadow-lg);
   color: var(--t-ink);
@@ -332,7 +329,7 @@
 }
 .tn-progress__step.is-active .tn-progress__dot {
   background-color: var(--t-rule-red);
-  box-shadow: 0 0 0 3px rgba(214, 69, 69, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--t-rule-red) 18%, transparent);
 }
 
 .tn-progress__npc {
@@ -382,7 +379,7 @@
   padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid var(--t-rule-red);
-  background-color: rgba(214, 69, 69, 0.08);
+  background-color: color-mix(in srgb, var(--t-rule-red) 8%, transparent);
   color: var(--t-rule-red);
   font-family: var(--t-font-mono);
   font-size: 11px;

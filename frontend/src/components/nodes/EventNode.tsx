@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EventData } from '../../lib/types';
 
 /**
- * 事件节点：铜锈绿顶条（--t-verdigris）· 虚线边框（=可触发/条件）· kind 徽章。
+ * 事件节点：铜锈绿强调条（--t-verdigris）· 虚线边框（=可触发/条件）· kind 徽章。
  */
 const EventNode = memo(function EventNode({ data, selected }: NodeProps) {
   const d = data as unknown as EventData;

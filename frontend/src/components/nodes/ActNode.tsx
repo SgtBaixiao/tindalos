@@ -3,8 +3,8 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { ActData } from '../../lib/types';
 
 /**
- * 幕节点：红粗顶条（--t-rule-red）· 圆角宽卡 · 罗马数字标题。
- * §2.3 卡片规范：顶条色区分类型，整卡保持纸白统一（纸纹噪点底 + 暖阴影）。
+ * 幕节点：墨强调条（--t-rule-red）· 圆角宽卡 · 罗马数字标题。
+ * §2.3 卡片规范：左缘细强调条区分类型，整卡纸墨统一（克制，去纸纹噪点）。
  */
 const ActNode = memo(function ActNode({ data, selected }: NodeProps) {
   const d = data as unknown as ActData;

@@ -15,5 +15,8 @@ frontend/node_modules
 frontend/dist
 node_modules
 references
+!references/
+!references/style-guide.md
+references/sources
 *.pdf
 *.txt

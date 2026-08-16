@@ -1,0 +1,25 @@
+services:
+  tindalos:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: tindalos:latest
+    container_name: tindalos
+    ports:
+      - "8347:8347"
+    volumes:
+      - tindalos_data:/app/data
+    env_file:
+      - .env
+    environment:
+      TINDALOS_LLM_ENABLED: "1"
+      TINDALOS_MODEL: "deepseek-chat"
+      TINDALOS_STYLE_GUIDE: "1"
+      TINDALOS_FRONTEND_DIST: "frontend/dist"
+      # 统一数据目录（模组文件/RAG 索引/历史库 site.db 全部落卷 tindalos_data，
+      # 容器重建后数据保留）。history.db_path 默认即 TINDALOS_DATA_DIR/site.db。
+      TINDALOS_DATA_DIR: "/app/data"
+    restart: unless-stopped
+
+volumes:
+  tindalos_data:

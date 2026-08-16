@@ -23,6 +23,9 @@ artifacts/
 node_modules/
 frontend/node_modules/
 
+# 部署密钥（deploy/.env 由 cp .env.example 生成，含真实 API key，不入库）
+deploy/.env
+
 # 版权内容（不入库）：
 # - 第七版守秘人规则书 PDF（用户明确要求）
 # - references/sources/：规则书前 120 页 + 官方模组的原文提取（版权）

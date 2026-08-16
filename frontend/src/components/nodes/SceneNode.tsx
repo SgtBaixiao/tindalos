@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { SceneData } from '../../lib/types';
 
 /**
- * 场景节点：橙顶条（--t-orange）· 标准矩形 · 时间地点 + 状态徽章。
+ * 场景节点：墨灰强调条（--t-orange）· 标准矩形 · 时间地点 + 状态徽章。
  */
 const SceneNode = memo(function SceneNode({ data, selected }: NodeProps) {
   const d = data as unknown as SceneData;

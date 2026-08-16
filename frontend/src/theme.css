@@ -117,15 +117,16 @@ body {
   --xy-connectionline-stroke-default: var(--t-orange);
   --xy-handle-background-color-default: var(--t-orange-deep);
   --xy-handle-border-color-default: var(--t-paper);
-  --xy-selection-background-color-default: rgba(232, 98, 12, 0.08);
-  --xy-selection-border-default: 1px dotted rgba(232, 98, 12, 0.8);
+  /* 选区/网格跟随 --t-ink 墨阶（嵌入站点后自动呈纸墨语言） */
+  --xy-selection-background-color-default: color-mix(in srgb, var(--t-ink) 8%, transparent);
+  --xy-selection-border-default: 1px dotted color-mix(in srgb, var(--t-ink) 55%, transparent);
   --xy-minimap-background-color-default: var(--t-oldpaper);
-  --xy-background-pattern-dots-color-default: rgba(43, 38, 20, 0.14);
+  --xy-background-pattern-dots-color-default: color-mix(in srgb, var(--t-ink) 14%, transparent);
   --xy-controls-button-background-color-default: var(--t-paper-deep);
   --xy-controls-button-background-color-hover-default: var(--t-oldpaper);
   --xy-controls-button-border-color-default: var(--t-line);
   --xy-controls-button-color-default: var(--t-ink);
-  --xy-minimap-mask-background-color-default: rgba(43, 38, 32, 0.06);
+  --xy-minimap-mask-background-color-default: color-mix(in srgb, var(--t-ink) 6%, transparent);
   --xy-minimap-node-stroke-color-default: transparent;
   --xy-attribution-background-color-default: transparent;
   --xy-attribution-color-default: var(--t-ink-faint);
@@ -135,7 +136,7 @@ body {
 
 /* 深色下 dot 网格降对比、attribution 隐藏弱化 */
 .react-flow.dark {
-  --xy-background-pattern-dots-color-default: rgba(237, 228, 212, 0.1);
+  --xy-background-pattern-dots-color-default: color-mix(in srgb, var(--t-ink) 10%, transparent);
   --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.3);
 }
 

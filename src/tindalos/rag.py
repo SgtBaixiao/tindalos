@@ -806,9 +806,14 @@ def _llm_answer(question: str, context: str, rules: str | None, sources: list[di
     timeout = float(os.environ.get("TINDALOS_LLM_TIMEOUT", "60"))
 
     system = (
-        "你是 TRPG 规则问答助手（Tindalos）。仅依据下面给出的模组/规则书来源作答，"
-        "不要编造来源之外的信息；规则体系无关（COC/DND 皆可回答）；"
-        "作答时标注引用来源（模块名与块号）；用中文回答。"
+        "你是 TRPG 规则问答助手（Tindalos）。规则体系无关（COC/DND 皆可回答）；用中文回答。\n"
+        "作答要求（按优先级）：\n"
+        "1. 直接回答用户的问题，先给结论，再分点补充规则细节；用你自己的话组织语言，"
+        "不要照抄参考来源原文。\n"
+        "2. 只依据下面给出的参考来源作答，不得编造来源之外的信息；"
+        "若用户问的细节在来源中找不到，明确回答『来源未提及』。\n"
+        "3. 引用来源时，在相应句子末尾用 [来源N] 标注（N 对应参考来源编号）。\n"
+        "4. 答案要简洁克制：只回答问到的，不展开无关背景，避免重复与冗余。"
     )
     if rules:
         system += f"\n本次问答适用的规则体系：{rules}。"
@@ -904,6 +909,23 @@ def _merge_sources(child_results: list[dict], parent_results: list[dict]) -> lis
     return out
 
 
+def _dedup_sources(sources: list[dict]) -> list[dict]:
+    """按文本内容去重（同一 PDF 被多次上传会索引出重复块；父块与子块也可能重叠）。
+
+    取每条来源的空白归一文本作 key，同 key 只保留 score 最高的一条；
+    返回仍按 score 降序（检索信号优先）。
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    for s in sorted(sources, key=lambda x: float(x.get("score") or 0.0), reverse=True):
+        norm = "".join((s.get("text") or "").split())
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        out.append(s)
+    return out
+
+
 def qa(
     question: str,
     *,
@@ -917,7 +939,7 @@ def qa(
     """
     results = search(question, module_id=module_id, top_k=6)
     parent_results = _fetch_parent_records(results)
-    sources = _merge_sources(results, parent_results)
+    sources = _dedup_sources(_merge_sources(results, parent_results))
 
     llm_key = os.environ.get("TINDALOS_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
     llm_enabled = os.environ.get("TINDALOS_LLM_ENABLED", "0") == "1"

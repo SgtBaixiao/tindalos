@@ -1,7 +1,8 @@
 /* ============================================================
  * nodes.css —— 五类节点卡片（§2.3 组件规范）
- * 视觉区分策略 = 顶条色 + 边框形态 + 图标；整卡保持纸白统一
- * 全部由 --t-* 令牌驱动
+ * 视觉区分策略 = 左缘细强调条（hairline）+ 边框形态 + 图标；
+ * 克制原则：类型靠低饱和色相区分，不用粗顶条/高亮原色堆强调。
+ * 全部由 --t-* 令牌驱动；嵌入站点后令牌继承纸墨语言。
  * ============================================================ */
 
 .tn-node {
@@ -9,11 +10,10 @@
   display: flex;
   flex-direction: column;
   min-height: 64px;
-  padding: 8px 12px 10px;
+  padding: 10px 12px 11px;
   background-color: var(--t-paper-deep);
-  background-image: var(--t-paper-texture);
   border: 1px solid var(--t-line);
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: var(--t-shadow-sm);
   font-family: var(--t-font-body);
   color: var(--t-ink);
@@ -31,13 +31,14 @@
   box-shadow: 0 0 0 2px var(--t-orange), var(--t-shadow-md);
 }
 
+/* 左缘细强调条（hairline）：不切标题、克制；默认墨阶，类型各自覆色 */
 .tn-node__bar {
   position: absolute;
-  top: 0;
-  left: 8px;
-  right: 8px;
-  height: 5px;
-  border-radius: 0 0 3px 3px;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
   background-color: var(--t-ink-faint);
 }
 
@@ -83,38 +84,32 @@
   margin-top: 2px;
 }
 
-/* --- 幕 Act：红粗顶条，宽卡 --- */
+/* --- 幕 Act：宽卡 + 墨强调条 --- */
 .tn-node--act {
   width: 280px;
-  padding-top: 14px;
-  border-top: 3px solid var(--t-rule-red);
 }
 .tn-node--act .tn-node__bar {
-  display: none;
+  background-color: var(--t-rule-red);
 }
 
-/* --- 场景 Scene：橙顶条，标准矩形 --- */
+/* --- 场景 Scene：标准矩形 + 墨灰强调条 --- */
 .tn-node--scene {
   width: 230px;
-  padding-top: 14px;
-  border-top: 3px solid var(--t-orange);
 }
 .tn-node--scene .tn-node__bar {
-  display: none;
+  background-color: var(--t-orange);
 }
 
-/* --- 事件 Event：铜锈绿顶条 + 虚线边框（=可触发/条件） --- */
+/* --- 事件 Event：铜锈绿强调条 + 虚线边框（=可触发/条件） --- */
 .tn-node--event {
   width: 210px;
-  padding-top: 14px;
-  border-top: 3px solid var(--t-verdigris);
   border-style: dashed;
   border-left-style: solid;
   border-right-style: solid;
   border-bottom-style: solid;
 }
 .tn-node--event .tn-node__bar {
-  display: none;
+  background-color: var(--t-verdigris);
 }
 
 /* --- NPC：墨蓝胶囊（区别于剧情节点矩形），含头像圈 --- */
@@ -125,7 +120,7 @@
   align-items: center;
   gap: 10px;
   border-radius: 999px;
-  border: 1.5px solid var(--t-inkblue);
+  border: 1px solid var(--t-inkblue);
   background-color: var(--t-paper-deep);
   padding: 8px 16px 8px 10px;
 }
@@ -138,22 +133,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--t-inkblue);
-  color: var(--t-paper);
+  background-color: var(--t-paper);
+  color: var(--t-ink-soft);
   font-family: var(--t-font-display);
   font-size: 14px;
-  border: 1px solid var(--t-line);
+  border: 1px solid var(--t-ink-faint);
 }
 
-/* --- 线索 Clue：墨棕顶条 + 旧纸底（典籍感） --- */
+/* --- 线索 Clue：墨棕强调条 + 旧纸底（典籍感） --- */
 .tn-node--clue {
   width: 210px;
-  padding-top: 14px;
-  border-top: 3px solid var(--t-sepia-ink);
   background-color: var(--t-oldpaper);
 }
 .tn-node--clue .tn-node__bar {
-  display: none;
+  background-color: var(--t-sepia-ink);
 }
 
 /* --- 连接把手（对齐 --xy-* 令牌） --- */

@@ -198,6 +198,32 @@ def test_qa_empty_index():
     assert out["answer"]
 
 
+def test_dedup_sources_keeps_highest_score():
+    """内容去重：同文本只留 score 最高的一条；空文本剔除。"""
+    srcs = [
+        {"text": "A 内容", "score": 0.3},
+        {"text": "A 内容", "score": 0.9},
+        {"text": "B 内容", "score": 0.5},
+        {"text": "", "score": 1.0},
+        {"text": "  A  内容 ", "score": 0.6},  # 空白差异也应视为同一文本
+    ]
+    out = rag._dedup_sources(srcs)
+    assert len(out) == 2
+    assert out[0]["score"] == 0.9
+    assert out[1]["score"] == 0.5
+
+
+def test_qa_sources_dedup_duplicate_module_content():
+    """同一 PDF 用两个 module_id 重复上传 → qa() 的 sources 无重复文本。"""
+    rag.ingest_module("m1", "德罗赫达之宴", FIXTURE)
+    rag.ingest_module("m1b", "德罗赫达之宴", FIXTURE)  # 模拟同一规则书上传两次
+    out = rag.qa("缪楚是什么人物？")
+    texts = [s["text"] for s in out["sources"]]
+    assert len(texts) == len(set(texts))
+    # 关键信息仍应命中
+    assert any("缪楚" in t for t in texts)
+
+
 def test_reset_clears_data():
     rag.ingest_module("m1", "德罗赫达之宴", FIXTURE)
     assert rag.stats()["chunks"] > 0

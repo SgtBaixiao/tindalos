@@ -26,10 +26,11 @@ def db(tmp_path, monkeypatch):
 
 
 def test_db_path_default(monkeypatch):
-    """缺省 TINDALOS_SITE_DB 时指向仓库根 data/site.db。"""
+    """缺省 TINDALOS_SITE_DB / TINDALOS_DATA_DIR 时指向工作目录 data/site.db。"""
     monkeypatch.delenv("TINDALOS_SITE_DB", raising=False)
+    monkeypatch.delenv("TINDALOS_DATA_DIR", raising=False)
     p = history.db_path()
-    assert p == Path(__file__).resolve().parents[1] / "data" / "site.db"
+    assert p == Path("data") / "site.db"
 
 
 def test_db_path_env_override(db, tmp_path):
