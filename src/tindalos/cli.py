@@ -425,6 +425,25 @@ def serve_command(
         raise typer.Exit(code=1) from e
 
 
+@app.command(name="web")
+def web_command(
+    host: str = typer.Option("127.0.0.1", "--host", help="HTTP 监听地址（默认 127.0.0.1）"),
+    port: int = typer.Option(8347, "--port", "-p", help="HTTP 监听端口（默认 8347）"),
+) -> None:
+    """⑨ 个人网站统一服务：SSE 生成（serve 契约）+ PDF 上传解析 + RAG + 历史记录 + 静态站点。
+
+    FastAPI 一站式后端（src/tindalos/web.py），挂载 /files 静态数据与 frontend/dist。
+    需 `pip install -e .[web]`；历史/RAG 模块缺失时对应端点诚实降级。
+    """
+    try:
+        from tindalos.web import run
+
+        run(host=host, port=port)
+    except OSError as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
 __all__ = ["app", "render_notes"]
 
 

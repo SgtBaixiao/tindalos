@@ -1,13 +1,19 @@
-# 仓库级 docker 构建上下文排除（.sandbox/Dockerfile 与 .sandbox/web.Dockerfile 共用根上下文）
-node_modules/
-frontend/node_modules/
-dist/
-frontend/dist/
-.git/
-.harness/
-artifacts/
-data/
-.pytest_cache/
-__pycache__/
+# 根 .dockerignore —— 供 .sandbox/web.Dockerfile 的构建上下文收敛
+# （CI 内 docker build 只关心 frontend/，排除一切无关大目录，保证上下文小且干净）
+.git
+.venv
+.venv-*
+__pycache__
 *.pyc
-.venv/
+.pytest_cache
+.harness
+data
+build
+dist
+artifacts
+frontend/node_modules
+frontend/dist
+node_modules
+references
+*.pdf
+*.txt

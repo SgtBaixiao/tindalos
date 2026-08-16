@@ -24,6 +24,7 @@
 
 - [PDF 文本与图像提取合规方案](issues/03-PDF文本与图像提取合规方案.md) — Web 服务弃用 PyMuPDF（AGPL §13 网络义务与 MIT 冲突）：文本改 pypdf（BSD）、图像/坐标/栅格化改 pypdfium2（Apache/BSD）；本地 run-module.sh 可留 fitz（无分发无网络）。阻塞的 04 已解锁。
 - [集成缺口修复](issues/08-集成缺口修复.md) — 前端 live 改 fetch POST /api/generate 读 SSE 流（复用 SseStreamParser），serve.py 契约零改动；ProgressBand 失败/错误回退静态 progress.jsonl 语义保留；vite dev proxy /api→127.0.0.1:8347；82 前端测试绿 + 真实 TCP 实测 SSE 逐条推进至 done:true campaign。前端 live 演示已解锁。
+- **全套工程完成（ticket 01-08 实施 + 端到端集成）** — FastAPI 统一服务（web.py）为同时满足 serve 契约与站点契约加**别名/包装**：`POST /api/modules`、`GET /api/modules/history`、`POST /api/modules/{id}/ingest|confirm-image`、`POST /api/qa`、`GET /api/campaigns`、`GET /api/campaigns/{id}→{campaign,meta}`（工作台 `json.campaign ?? json` 向后兼容）。PDF 上传解析（pdfio，pypdf/pypdfium2 合规）、RAG（离线 BM25 无 key 诚实降级 local）、历史 SQLite、SSE 生成全链路打通；后端 313 测绿 + 前端 93 测绿；真实 HTTP 演示验证 SSE 9 帧→done:true→列表→`{campaign,meta}`→历史→RAG 问答全部通过。
 
 ## Not yet specified
 

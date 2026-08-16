@@ -18,7 +18,7 @@ jobs:
           cache: pip
       - name: Install
         run: |
-          pip install -e ".[dev,llm]"
+          pip install -e ".[dev,llm,web]"
       - name: Test
         run: python -m pytest tests/ -q
 

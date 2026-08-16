@@ -30,6 +30,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 llm = ["requests>=2.31"]
+web = [
+    "fastapi>=0.124",
+    "uvicorn>=0.38",
+    "python-multipart>=0.0.22",
+    "pypdfium2>=0.13",
+    "chromadb>=1.5.9",
+    "Pillow>=11",
+    "numpy>=2",
+]
 
 [project.urls]
 Repository = "https://github.com/SgtBaixiao/tindalos"

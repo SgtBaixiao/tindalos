@@ -5,10 +5,26 @@
 [![CI](https://github.com/SgtBaixiao/tindalos/actions/workflows/ci.yml/badge.svg)](https://github.com/SgtBaixiao/tindalos/actions/workflows/ci.yml)
 [![GitHub Pages](https://img.shields.io/badge/demo-live-orange)](https://sgtbaixiao.github.io/tindalos/)
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
-![Tests](https://img.shields.io/badge/tests-234%20backend%20%2B%2074%20frontend-green)
+![Tests](https://img.shields.io/badge/tests-313%20backend%20%2B%2093%20frontend-green)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 
 **▶ 在线演示**：[sgtbaixiao.github.io/tindalos](https://sgtbaixiao.github.io/tindalos)（剧本节点图 · 点击节点 → 抽屉编辑 · 生成进度带 · 暖墨深色板）
+
+## 个人网站 SgtXLonelyHeartsClub（纸墨极简）
+
+把 Tindalos 接入个人网站，复刻 aicodingdictionary.com 的**纸墨极简设计/动效**：首页为各栏目入口 → 剧本工作台 / 模组资料库 / 规则问答 / 历史记录（含重放子页面），COC+DND 双规则中立。
+
+- **GitHub Pages**（本仓库自动部署）：静态 UI/设计展示——纸墨动效、栏目入口、示例重放。**无需本地即可访问**。
+- **完整交互**（PDF 上传解析 / 头像·地点·地图多模态识别 / SSE 生成 / RAG 检索问答 / 历史落库）需要后端进程：
+
+```bash
+pip install -e ".[web]"                       # FastAPI + pdfio + RAG
+python -m tindalos.cli web --port 8347        # 单进程托管前端产物 + 全部 API
+# 浏览器打开 http://127.0.0.1:8347
+# （前端 dev 热更新：cd frontend && npm run dev，proxy 已指向 127.0.0.1:8347）
+```
+
+> **Pages 边界**：GitHub Pages 仅托管静态产物，跑不了 Python 后端——交互功能需本地运行或部署到自托管（VPS / PaaS / 云函数，API key 一律走环境变量）。
 
 ```
 KP 主控 ──► 解析模组 → 拟定幕结构 ──► NPC 并行注入人格（Send）──► 每幕子图写作 ──► 校对付印

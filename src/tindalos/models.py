@@ -115,6 +115,11 @@ class Campaign(BaseModel):
     - scene/act 引用的 npc_id、clue.linked_npc_ids 必须存在于 campaign.npcs；
     - clue.linked_event_ids 与 event.next_event_ids 必须解析到某幕某场景的事件；
     - npc.acts_roles 的幕 id 必须存在。
+
+    规则中立（wayfinder ticket 06）：`rules` 标注生成/展示所依据的规则体系
+    （COC7 默认；DND5e 预留），`rules_config` 携带规则定制项（判定参数等）。
+    领域字段保持规则中立——下层结构不做 COC 专属硬编码，规则差异仅体现于
+    顶层标注与可选配置，DND 后续独立 effort 无需大改 schema。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -122,6 +127,8 @@ class Campaign(BaseModel):
     id: str
     title: str
     premise: str = ""
+    rules: Literal["COC7", "DND5e"] = "COC7"
+    rules_config: dict[str, Any] = Field(default_factory=dict)
     acts: list[Act] = Field(default_factory=list)
     npcs: dict[str, NPC] = Field(default_factory=dict)
     clues: list[Clue] = Field(default_factory=list)
@@ -393,5 +400,6 @@ def construct_loose_campaign(raw: dict) -> "Campaign":
     ]
     return Campaign.model_construct(
         id=raw.get("id", ""), title=raw.get("title", ""), premise=raw.get("premise", ""),
+        rules=raw.get("rules", "COC7"), rules_config=raw.get("rules_config", {}),
         acts=acts, npcs=npcs, clues=clues, relations=relations,
     )
