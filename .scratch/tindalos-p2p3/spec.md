@@ -33,4 +33,4 @@
 - 前端全量：**vitest 104 passed + `npm run build` 绿**（新增 5 个：memory.test.tsx）。
 - 新增文件：`src/tindalos/sleep.py`、`tests/test_sleep.py`、`tests/test_session_api.py`、`frontend/src/site/MemoryView.tsx`、`frontend/tests/memory.test.tsx`。
 - 新增 CLI：`tindalos session` / `tindalos consolidate` / `tindalos serve --consolidate-interval`。
-- 提交：`<主线程提交哈希>`（见 git log，本阶段 feat 提交）。
+- 提交：`9e87a4e`（feat: P2 完成 + P3 全做，本阶段主线程提交）。
