@@ -151,7 +151,8 @@ body {
 .sx-library,
 .sx-history,
 .sx-replay,
-.sx-eval {
+.sx-eval,
+.sx-memory {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -361,7 +362,7 @@ body {
 
 .sx-home__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 1.1rem;
   margin-top: 2rem;
 }
@@ -1473,6 +1474,268 @@ body {
   font-family: var(--sx-font-mono);
   font-size: 0.7rem;
   color: var(--sx-ink-faint);
+}
+
+/* ---------- 记忆 Memory ---------- */
+
+.sx-memory {
+  padding: clamp(1.4rem, 3vw, 2.5rem);
+}
+.sx-memory__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.sx-memory__campaign {
+  font-family: var(--sx-font-mono);
+  font-size: 0.72rem;
+  color: var(--sx-ink-faint);
+  overflow-wrap: anywhere;
+}
+.sx-memory__head {
+  margin-bottom: 1.6rem;
+}
+.sx-memory__title {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  letter-spacing: -0.02em;
+}
+.sx-memory__desc {
+  margin: 0.45rem 0 0;
+  font-size: 0.9rem;
+  color: var(--sx-ink-soft);
+  line-height: 1.6;
+}
+.sx-memory h2 {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sx-ink-faint);
+  margin: 0 0 1rem;
+}
+
+/* briefing 卡片（「上次停在哪」+ play_status） */
+.sx-briefing__card {
+  border: 1px solid var(--sx-line);
+  border-radius: 1rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--sx-paper-deep);
+  margin-bottom: 1.6rem;
+}
+.sx-briefing__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+.sx-briefing__kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sx-ink-faint);
+}
+.sx-briefing__campaign {
+  font-family: var(--sx-font-mono);
+  font-size: 0.72rem;
+  color: var(--sx-ink-faint);
+}
+.sx-briefing__text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  color: var(--sx-ink-soft);
+}
+.sx-briefing__meta {
+  margin-top: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* 剧情线状态（longterm synopsis / plotline / npc_arcs） */
+.sx-plotline {
+  margin-bottom: 1.6rem;
+}
+.sx-plotline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.sx-plotline__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--sx-line);
+  border-radius: 1rem;
+  padding: 0.9rem 1.1rem;
+  background: var(--sx-paper-deep);
+}
+.sx-plotline__key {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sx-ink-faint);
+}
+.sx-plotline__content {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--sx-ink);
+}
+
+/* 四类记忆分区 */
+.sx-memory__sections {
+  margin-bottom: 1.6rem;
+}
+.sx-mem-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.sx-mem-panel {
+  border: 1px solid var(--sx-line);
+  border-radius: 1rem;
+  padding: 1rem 1.1rem;
+  background: var(--sx-paper-deep);
+  min-width: 0;
+}
+.sx-mem-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+.sx-mem-panel__title {
+  font-weight: 600;
+}
+.sx-mem-panel__count {
+  font-family: var(--sx-font-mono);
+  font-size: 0.68rem;
+  color: var(--sx-ink-faint);
+}
+.sx-mem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sx-mem-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--sx-line);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--sx-paper);
+  min-width: 0;
+}
+.sx-mem-item__content {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--sx-ink-soft);
+  overflow-wrap: anywhere;
+}
+.sx-mem-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-family: var(--sx-font-mono);
+  font-size: 0.66rem;
+  color: var(--sx-ink-faint);
+}
+
+/* 会话时间线 */
+.sx-memory__sessions {
+  margin-bottom: 1.6rem;
+}
+.sx-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.sx-session {
+  border: 1px solid var(--sx-line);
+  border-radius: 1rem;
+  padding: 1rem 1.15rem;
+  background: var(--sx-paper-deep);
+}
+.sx-session__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.sx-session__index {
+  font-weight: 600;
+}
+.sx-session__date {
+  margin-left: auto;
+  font-family: var(--sx-font-mono);
+  font-size: 0.68rem;
+  color: var(--sx-ink-faint);
+}
+.sx-session__summary {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--sx-ink-soft);
+}
+.sx-session__conflicts {
+  margin-top: 0.7rem;
+  border-top: 1px dashed var(--sx-line-strong);
+  padding-top: 0.65rem;
+}
+.sx-conflict-badge {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 1px solid var(--sx-red);
+  color: var(--sx-red);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  list-style: none;
+}
+.sx-conflict-badge::-webkit-details-marker {
+  display: none;
+}
+.sx-conflict-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.sx-conflict-item {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--sx-ink-soft);
+  padding-left: 0.85rem;
+  position: relative;
+}
+.sx-conflict-item::before {
+  content: '›';
+  position: absolute;
+  left: 0.2rem;
+  color: var(--sx-red);
 }
 
 /* ---------- 动效工具 ---------- */

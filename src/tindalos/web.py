@@ -22,6 +22,8 @@
   GET    /api/history/campaigns  → {campaigns:[...]}
   GET    /api/history/campaigns/<id> → {campaign, meta}
   DELETE /api/history/campaigns/<id> → 204
+  POST   /api/sessions/<campaign_id>  body={summary, play_status?, conflicts?} → 会话结果（P2 回叙采集）
+  GET    /api/sessions/<campaign_id> → {campaign_id, current_play_status, sessions:[...]}
   /files/**   静态挂载 data/（模组图像等）
   /           frontend/dist 存在时静态托管站点（hash 路由，无需 SPA 回退）
 
@@ -103,6 +105,17 @@ class ConfirmImageRequest(BaseModel):
     caption: str | None = None
 
 
+class RecordSessionRequest(BaseModel):
+    """POST /api/sessions/{campaign_id}：KP 回叙采集一场游玩会话（P2）。
+
+    summary 必填（非空）；play_status / conflicts 可选。conflicts 为分歧/规则裁定
+    记录列表，交由 record_session json.dumps 落库（读回时解析回对象）。
+    """
+    summary: str
+    play_status: str | None = None
+    conflicts: list[dict[str, Any]] | None = None
+
+
 # ---------------------------------------------------------------- 路径与状态
 
 
@@ -176,6 +189,24 @@ def _module_payload(row: dict, *, detail: bool = False) -> dict:
         except OSError:
             payload["text_preview"] = ""
     return payload
+
+
+def _session_payload(row: dict) -> dict:
+    """play_sessions 行 → API 载荷（conflicts JSON 字符串解析回对象，与 /api/memories 同款）。"""
+    conflicts = row.get("conflicts")
+    if isinstance(conflicts, str):
+        try:
+            conflicts = json.loads(conflicts)
+        except json.JSONDecodeError:
+            conflicts = None
+    return {
+        "session_id": row["id"],
+        "session_index": row["session_index"],
+        "summary": row["summary"],
+        "play_status": row["play_status"],
+        "conflicts": conflicts,
+        "created_at": row["created_at"],
+    }
 
 
 def _find_module_by_sha256(sha256: str) -> dict | None:
@@ -663,6 +694,61 @@ def create_app() -> FastAPI:
             "play_status": me.current_play_status(campaign_id, db),
             "briefing": me.briefing(campaign_id, db),
             "memories": memories,
+        }
+
+    # ---------------------------------------------------------- 游玩会话（P2 回叙采集）
+
+    @app.post("/api/sessions/{campaign_id}")
+    async def api_record_session(campaign_id: str, body: RecordSessionRequest):
+        """KP 回叙 → 记一场游玩会话 + 轻量整合（设计文档 §3.3 P2 / ticket 01）。
+
+        summary 必填非空（空 → 400）；db_path 与 /api/memories 同款
+        memory_entries.sqlite；record_session 内部走确定性 consolidate（零 LLM）。
+        返回该会话结果（session_index / play_status / conflicts / created_at + consolidate）。
+        """
+        from tindalos import memory_entries as me
+
+        summary = body.summary.strip()
+        if not summary:
+            raise HTTPException(status_code=400, detail="summary 必填非空字符串")
+        db = _data_dir() / "store" / "memory_entries.sqlite"
+        result = me.record_session(
+            campaign_id,
+            summary,
+            db_path=db,
+            play_status=body.play_status,
+            conflicts=body.conflicts,
+        )
+        sessions = me.list_play_sessions(campaign_id, db)
+        row = next((s for s in sessions if s["id"] == result["session_id"]), None)
+        if row is not None:
+            payload = _session_payload(row)
+        else:  # 防御：极端情况下读不回刚写的行 → 用请求参数兜底
+            payload = {
+                "session_id": result["session_id"],
+                "session_index": result["session_index"],
+                "summary": summary,
+                "play_status": result["play_status"],
+                "conflicts": body.conflicts,
+                "created_at": None,
+            }
+        payload["consolidate"] = result["consolidate"]
+        return payload
+
+    @app.get("/api/sessions/{campaign_id}")
+    async def api_sessions(campaign_id: str):
+        """某 campaign 的全部游玩会话 + 最近 play_status（设计文档 §3.3 P2 / ticket 01）。
+
+        无会话时返回空列表与 current_play_status=None，不 404（与 /api/memories 同哲学）。
+        """
+        from tindalos import memory_entries as me
+
+        db = _data_dir() / "store" / "memory_entries.sqlite"
+        sessions = [_session_payload(s) for s in me.list_play_sessions(campaign_id, db)]
+        return {
+            "campaign_id": campaign_id,
+            "current_play_status": me.current_play_status(campaign_id, db),
+            "sessions": sessions,
         }
 
     # ---------------------------------------------------------- 静态托管

@@ -10,6 +10,8 @@
  *  - #/history/<campaignId>    剧本重放
  *  - #/eval                    评测列表
  *  - #/eval/<runId>            评测详情（L1..L6 trace + 标注）
+ *  - #/memories                记忆索引（选择战役）
+ *  - #/memories/<campaignId>   记忆详情（briefing + 剧情线 + 四类记忆 + 会话时间线）
  *
  * 首次挂载显示 Loading（品牌词升起 → 坠落淡出），随后进入首页。
  * 不依赖 react-router：window.location.hash + hashchange。
@@ -26,6 +28,7 @@ import { HistoryView } from './HistoryView';
 import { ReplayView } from './ReplayView';
 import { EvalView } from './EvalView';
 import { EvalDetailView } from './EvalDetailView';
+import { MemoryIndex, MemoryView } from './MemoryView';
 
 const ROUTE_TITLES: Record<string, string> = {
   workbench: '剧本工作台',
@@ -35,6 +38,7 @@ const ROUTE_TITLES: Record<string, string> = {
   replay: '剧本重放',
   eval: '评测',
   'eval-detail': '评测详情',
+  memories: '记忆',
 };
 
 export function SiteApp() {
@@ -50,6 +54,7 @@ export function SiteApp() {
 
   const isReplay = route === 'history' && segments.length >= 2;
   const isEvalDetail = route === 'eval' && segments.length >= 2;
+  const isMemoriesDetail = route === 'memories' && segments.length >= 2;
   const viewRoute = isReplay ? 'replay' : isEvalDetail ? 'eval-detail' : route;
   const title = ROUTE_TITLES[viewRoute];
 
@@ -68,6 +73,10 @@ export function SiteApp() {
     view = <EvalDetailView runId={segments[1]} navigate={navigate} />;
   } else if (route === 'eval') {
     view = <EvalView navigate={navigate} />;
+  } else if (route === 'memories' && isMemoriesDetail) {
+    view = <MemoryView campaignId={segments[1]} navigate={navigate} />;
+  } else if (route === 'memories') {
+    view = <MemoryIndex navigate={navigate} />;
   } else {
     view = <Home navigate={navigate} />;
   }

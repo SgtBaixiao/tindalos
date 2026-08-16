@@ -26,10 +26,12 @@ import type {
   CampaignMeta,
   EvalAnnotation,
   EvalRun,
+  MemoriesResponse,
   Module,
   ModuleDetail,
   QaResult,
   RagHit,
+  SessionsResponse,
   VisionResult,
 } from './types';
 
@@ -160,4 +162,14 @@ export async function getEvalRun(
   return request<{ run: EvalRun; annotations: EvalAnnotation[] }>(
     `/api/eval/runs/${encodeURIComponent(runId)}`,
   );
+}
+
+/** 记忆可视化：战役 briefing + play_status + 四类记忆。 */
+export async function getMemories(campaignId: string): Promise<MemoriesResponse> {
+  return request<MemoriesResponse>(`/api/memories/${encodeURIComponent(campaignId)}`);
+}
+
+/** 记忆可视化：游玩会话时间线（session_index / summary / play_status / conflicts）。 */
+export async function getSessions(campaignId: string): Promise<SessionsResponse> {
+  return request<SessionsResponse>(`/api/sessions/${encodeURIComponent(campaignId)}`);
 }

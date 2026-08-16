@@ -43,6 +43,12 @@ export const COLUMNS: Column[] = [
     title: '评测',
     desc: '六层评测 trace：结构 / 图谱 / 质量 / 忠实度 / KP / 回归',
   },
+  {
+    route: 'memories',
+    mark: '▤',
+    title: '记忆',
+    desc: '四类记忆 + 剧情线状态 + 上次停在哪',
+  },
 ];
 
 const SLOGAN = '随时可访问的 TRPG 备团工作台';

@@ -209,3 +209,61 @@ export type EvalAnnotation = {
   evidence_refs?: EvalEvidenceRef[];
   created_at?: string;
 };
+
+/* ----------------------------------------------------------------
+ * Memory —— 记忆可视化（P3-2）。字段按 memory_entries.py / web.py
+ * memories、sessions 两个端点的真实响应声明，不臆造。
+ * ---------------------------------------------------------------- */
+
+/** 四类记忆：情景 / 语义 / 短期 / 长期。 */
+export type MemoryType = 'episodic' | 'semantic' | 'shortterm' | 'longterm';
+
+export const MEMORY_TYPES: MemoryType[] = ['episodic', 'semantic', 'shortterm', 'longterm'];
+
+export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
+  episodic: '情景记忆',
+  semantic: '语义记忆',
+  shortterm: '短期记忆',
+  longterm: '长期记忆',
+};
+
+/** 单条记忆（memory_entries 行；字段宽松声明，缺失即不展示）。 */
+export type MemoryEntry = {
+  id: string;
+  memory_type: MemoryType;
+  content: string;
+  importance?: number;
+  subject_key?: string | null;
+  source_episode?: string | null;
+  ref_ids?: string[] | null;
+  status?: string;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  created_at?: string;
+};
+
+/** GET /api/memories/{campaign_id} → {campaign_id, status, play_status, briefing, memories}。 */
+export type MemoriesResponse = {
+  campaign_id: string;
+  status?: string;
+  play_status?: string | null;
+  briefing?: string | null;
+  memories: Partial<Record<MemoryType, MemoryEntry[]>>;
+};
+
+/** 单场游玩会话（play_sessions 行）。conflicts 在 sqlite 存为 JSON TEXT，防御性处理。 */
+export type PlaySession = {
+  id?: string;
+  session_index: number;
+  summary: string;
+  play_status?: string | null;
+  conflicts?: unknown;
+  created_at?: string;
+};
+
+/** GET /api/sessions/{campaign_id} → {campaign_id, current_play_status, sessions}。 */
+export type SessionsResponse = {
+  campaign_id: string;
+  current_play_status?: string | null;
+  sessions: PlaySession[];
+};

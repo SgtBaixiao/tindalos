@@ -98,6 +98,12 @@ tindalos kg campaign.json --entity npc-1 --path-to clue-act-1
 tindalos serve --port 8347
 # ⑦ 跨会话记忆
 tindalos memories campaign.json
+# ⑧ 回叙采集（KP 记录本场实际游玩 → play_status + 冲突决策）
+tindalos session campaign.json --summary "第 2 幕 场景 3：PC 发现线索，与 NPC 对峙" --play-status "act-2, scene-3"
+# ⑨ 离线整合（sleep-time：短时→长期语义记忆 consolidation；可指定战役）
+tindalos consolidate --campaign campaign-1
+# ⑩ 实时服务可带后台整合线程（--consolidate-interval 秒，0=关）
+tindalos serve --port 8347 --consolidate-interval 300
 
 # 前端（实时演示）
 cd frontend && npm ci && npm run dev

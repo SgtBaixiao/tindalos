@@ -1,8 +1,8 @@
-"""Typer CLI（task t7-cli）：`tindalos` 八命令族。
+"""Typer CLI（task t7-cli）：`tindalos` 命令族。
 
 入口 `app` 经 pyproject `[project.scripts] tindalos = "tindalos.cli:app"` 暴露。
 
-八命令：
+命令：
   ① generate  模组文本（.md/.json）→ campaign JSON + 同目录 notes.md 备团笔记
               （默认 DeterministicGenerator；`--llm` 且 settings.llm_enabled 时用 OllamaGenerator）
   ② notes     campaign JSON → 重生成备团笔记 markdown
@@ -10,10 +10,13 @@
   ④ evolve    campaign JSON → 自进化循环（rounds 轮 eval→修复→复评，打印 loop_log）
   ⑤ kg        campaign JSON → 实体关系查询 / 多跳路径（--entity [--path-to]）
   ⑥ serve     HTTP API 服务：POST /api/generate（SSE）· GET /api/campaigns/<id> · POST /api/regenerate
+              （可选 --consolidate-interval 启后台离线整合线程）
   ⑦ regenerate campaign JSON → 单节点重生成（scene/event/npc/clue），其余保持不动
               （--node 必填；校验失败回滚原样；--llm 且 settings.llm_enabled 时用 OllamaGenerator）
   ⑧ memories  campaign id（或 campaign JSON 路径）→ 列出跨会话记忆事实
               （NPC 印象 / 关键事件 / 世界状态摘要；读 settings.store_dir 落盘 store）
+  ⑨ consolidate [--campaign <id>] [--db <path>] → 手动离线整合（指定或全部 campaign）
+  ⑩ session <campaign> --summary [--play-status] [--db] → 游玩会话回叙（record_session）
 
 契约：成功退出码 0；输入文件缺失 / JSON 解析失败 / 实体未知 → 非 0 退出码，错误打到 stderr。
 全程确定性（零网络零 LLM）：--llm/--judge 仅在 TINDALOS_LLM_ENABLED=1 时生效，否则回退。
@@ -434,6 +437,77 @@ def memories_command(
         raise typer.Exit(code=1) from e
 
 
+# ---------------------------------------------------------------- ⑨ consolidate（离线整合）
+
+
+@app.command(name="consolidate")
+def consolidate_command(
+    campaign: Optional[str] = typer.Option(
+        None, "--campaign", "-c", help="campaign id（缺省 = 全部 campaign）"
+    ),
+    db: Optional[Path] = typer.Option(
+        None, "--db", help="memory_entries SQLite 路径（缺省 = settings store 下 memory_entries.sqlite）"
+    ),
+) -> None:
+    """⑨ 离线记忆整合：对指定（或全部）campaign 把超限 episodic 整合进 longterm。
+
+    db 默认 settings.store_dir/memory_entries.sqlite（照 memories 命令惯例）；
+    每个 campaign 独立容错（单失败不整体失败）；无待整合 campaign 时输出提示退出码 0。
+    """
+    try:
+        from tindalos.memory_entries import entries_db_path
+        from tindalos.sleep import run_consolidation
+
+        settings = get_settings()
+        db_path = Path(db) if db else entries_db_path(settings)
+        result = run_consolidation(db_path, campaign_ids=[campaign] if campaign else None)
+        if not result["campaigns"]:
+            typer.echo("暂无待整合的 campaign（memory_entries 为空）")
+            return
+        for res in result["campaigns"]:
+            if res["ok"]:
+                written = "、".join(res["longterm_written"]) if res["longterm_written"] else "—"
+                typer.echo(
+                    f"campaign {res['campaign_id']}: 整合 {res['episodic_consolidated']} 条 episodic，"
+                    f"longterm 写入 {written}"
+                )
+            else:
+                typer.echo(f"campaign {res['campaign_id']}: 整合失败（{res['error']}）", err=True)
+        if result["errors"]:
+            raise typer.Exit(code=1)
+    except (OSError, ValueError) as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
+# ---------------------------------------------------------------- ⑩ session（游玩会话回叙）
+
+
+@app.command(name="session")
+def session_command(
+    campaign: str = typer.Argument(..., help="campaign id"),
+    summary: str = typer.Option(..., "--summary", "-s", help="本场回叙摘要"),
+    play_status: Optional[str] = typer.Option(None, "--play-status", help="游玩状态（进行中/结局/...）"),
+    db: Optional[Path] = typer.Option(
+        None, "--db", help="memory_entries SQLite 路径（缺省 = settings store 下 memory_entries.sqlite）"
+    ),
+) -> None:
+    """⑩ 游玩会话回叙：KP 回叙 → record_session（对应 web 端点的同一函数），打印新会话 index。"""
+    try:
+        from tindalos.memory_entries import entries_db_path, record_session
+
+        settings = get_settings()
+        db_path = Path(db) if db else entries_db_path(settings)
+        result = record_session(campaign, summary, db_path, play_status=play_status)
+        typer.echo(f"已记录第 {result['session_index']} 场会话（{result['session_id']}）")
+        cons = result["consolidate"]
+        if cons.get("episodic_consolidated"):
+            typer.echo(f"同步整合：{cons['episodic_consolidated']} 条 episodic 已并入长期记忆")
+    except (OSError, ValueError) as e:
+        typer.echo(f"错误：{e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
 # ---------------------------------------------------------------- ⑥ serve
 
 
@@ -441,15 +515,28 @@ def memories_command(
 def serve_command(
     host: str = typer.Option("127.0.0.1", "--host", help="HTTP 监听地址（默认 127.0.0.1）"),
     port: int = typer.Option(8347, "--port", "-p", help="HTTP 监听端口（默认 8347）"),
+    consolidate_interval: float = typer.Option(
+        0.0, "--consolidate-interval", help="后台离线整合轮询间隔（秒，默认 0=不启动）"
+    ),
 ) -> None:
     """⑥ HTTP API 服务：SSE 流式生成 + campaign 内存缓存 + 节点重生成（前端依赖契约）。"""
+    loop = None
     try:
+        if consolidate_interval > 0:
+            from tindalos.sleep import ConsolidationLoop
+
+            loop = ConsolidationLoop(interval_seconds=consolidate_interval)
+            loop.start()
+            typer.echo(f"后台记忆整合线程已启动（间隔 {consolidate_interval}s）", err=True)
         from tindalos.serve import serve as serve_api
 
         serve_api(host=host, port=port)
     except OSError as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
+    finally:
+        if loop is not None:
+            loop.stop()
 
 
 @app.command(name="web")
