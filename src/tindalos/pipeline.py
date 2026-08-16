@@ -39,6 +39,11 @@ from tindalos.config import Settings, get_settings
 from tindalos.generator import Generator, build_generator
 from tindalos.kg import WorldGraph, build_from_campaign
 from tindalos.memory import build_store, render_memory_section, write_memory_facts
+from tindalos.memory_entries import (
+    assemble_memory_context,
+    capture_memory_entries,
+    entries_db_path,
+)
 from tindalos.models import Act, Campaign, Clue, NPC, WorldRelation
 
 # 缺省分幕/NPC 数量（可经 TINDALOS_N_ACTS / TINDALOS_N_NPCS 环境变量覆盖）
@@ -197,10 +202,18 @@ def _write_scene(
     npc_ids: list[str],
     idx: int,
     scene_title: str,
+    memory_context: str = "",
 ) -> dict:
-    """单场景写作子任务：调用生成器后重编号，保证跨幕全局唯一 id。"""
+    """单场景写作子任务：调用生成器后重编号，保证跨幕全局唯一 id。
+
+    memory_context：write_act 注入的历史记忆（assemble_memory_context 输出）。
+    首轮生成无历史为空串，不影响 DeterministicGenerator 的确定性输出。
+    """
+    gen_premise = premise
+    if memory_context:
+        gen_premise = f"{premise}\n\n{memory_context}"
     # 用「幕标题 + 场景标题」作盐：同幕不同场景内容有差异，且保持确定性
-    scene = dict(generator.generate_scene(f"{act_draft['title']}·{scene_title}", premise, npc_ids))
+    scene = dict(generator.generate_scene(f"{act_draft['title']}·{scene_title}", gen_premise, npc_ids))
     scene["id"] = f"{act_draft['id']}-scene-{idx + 1}"
     scene["title"] = scene_title
     events = scene.get("events", [])
@@ -218,8 +231,12 @@ def _write_scene(
 # ---------------------------------------------------------------- 节点构造
 
 
-def _build_nodes(generator: Generator) -> dict[str, Any]:
-    """构造全部图节点（闭包绑定生成器）。"""
+def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
+    """构造全部图节点（闭包绑定生成器与 settings）。
+
+    settings 闭包供 compose 的 memory_entries 写入口与 write_act 的记忆注入
+    定位 SQLite 路径（尊重测试注入的 store_dir，避免污染真实 data/store）。
+    """
 
     def kp_parse(state: PipelineState) -> dict:
         module_text = (state.get("module_text") or "").strip()
@@ -319,25 +336,43 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
         return {}  # 占位：条件边 act_fanout_sends 负责 Send 扇出
 
     def act_fanout_sends(state: PipelineState) -> list[Send]:
+        campaign_id = state.get("campaign_id", "")
         return [
             Send(
                 "write_act",
                 {
                     "act_draft": dict(d),
                     "premise": state.get("premise", ""),
+                    "campaign_id": campaign_id,
                 },
             )
             for d in state.get("act_drafts", [])
         ]
 
     def write_act(state: PipelineState) -> dict:
-        """单幕写作：@task 并行生成全部场景，装配为 Act 草案返回（reducer 累加）。"""
+        """单幕写作：@task 并行生成全部场景，装配为 Act 草案返回（reducer 累加）。
+
+        记忆注入：以「幕标题·premise」为查询，从 memory_entries 检索既有记忆
+        （BM25 + 近因加权，assemble_memory_context）。首轮生成无历史 → 空串，
+        不影响确定性输出；跨会话/regenerate 时携带历史记忆进生成。
+        """
         draft = dict(state.get("act_draft", {}))
         premise = state.get("premise", "")
+        campaign_id = state.get("campaign_id", "")
         npc_ids = list(draft.get("npc_ids", []))
         scene_titles = list(draft.get("scene_titles", [])) or ["场景一"]
+        memory_context = ""
+        if campaign_id:
+            try:
+                memory_context = assemble_memory_context(
+                    campaign_id,
+                    f"{draft.get('title', '')}·{premise}",
+                    db_path=entries_db_path(settings),
+                )
+            except Exception:  # noqa: BLE001 - 记忆注入失败不阻塞生成（G5 修正）
+                memory_context = ""
         futures = [
-            _write_scene(generator, draft, premise, npc_ids, i, t)
+            _write_scene(generator, draft, premise, npc_ids, i, t, memory_context)
             for i, t in enumerate(scene_titles)
         ]
         scenes = [f.result() for f in futures]
@@ -378,6 +413,12 @@ def _build_nodes(generator: Generator) -> dict[str, Any]:
                 write_memory_facts(store, campaign)
             except Exception as mem_err:  # noqa: BLE001 - store 写失败不阻塞生成（G5 修正）
                 writer({"progress": f"记忆持久化失败（已跳过）：{mem_err}"})
+        # memory_entries 增量层（P0-a）：情景 + 语义，独立 SQLite，同样写失败不阻塞
+        try:
+            stats = capture_memory_entries(campaign, db_path=entries_db_path(settings))
+            writer({"progress": f"记忆条目入库（情景 {stats['episodic']['total']} / 语义 {stats['semantic']['total']}）"})
+        except Exception as mem_err:  # noqa: BLE001 - 写失败不阻塞生成（G5 修正）
+            writer({"progress": f"记忆条目入库失败（已跳过）：{mem_err}"})
         return {
             "campaign": campaign,
             "notes_md": assembled["notes_md"],
@@ -540,7 +581,7 @@ def build_pipeline(
         conn = sqlite3.connect(_checkpoint_uri(cp_path), check_same_thread=False)
         checkpointer = SqliteSaver(conn)
 
-    nodes = _build_nodes(generator)
+    nodes = _build_nodes(generator, settings)
 
     builder = StateGraph(PipelineState)
     builder.add_node("kp_parse", nodes["kp_parse"])

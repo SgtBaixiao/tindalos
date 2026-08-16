@@ -34,6 +34,16 @@ from tindalos.memory import (
     render_memory_section,
     write_memory_facts,
 )
+from tindalos.memory_entries import (
+    assemble_memory_context,
+    capture_episodic,
+    capture_memory_entries,
+    capture_semantic_initial,
+    count_entries,
+    entries_db_path,
+    list_entries,
+    render_entries_doc,
+)
 from tindalos.pipeline import build_pipeline, campaign_id_for, render_notes
 
 MODULE_TEXT = """# 雾镇疑云
@@ -242,3 +252,151 @@ def test_cli_notes_contains_memory_section(tmp_path):
     assert r.exit_code == 0, r.stdout
     text = out.read_text(encoding="utf-8")
     assert "## 记忆" in text and "NPC 印象" in text and "关键事件" in text
+
+
+# ---------------------------------------------------------------- 6. memory_entries 增量层（P0-a，零 LLM）
+
+
+def test_capture_episodic_structure(tmp_path):
+    """情景记忆：每 event 一条，id 前缀 evm:，source_episode 溯源，content_hash 判重键就位。"""
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    stats = capture_episodic(campaign, db)
+    assert stats["total"] > 0
+    events = sum(len(sc.events) for act in campaign.acts for sc in act.scenes)
+    assert stats["total"] == events, "每 event 一条情景记忆"
+    entries = list_entries(campaign.id, "episodic", db)
+    for e in entries:
+        assert e["id"].startswith(f"evm:{campaign.id}:")
+        assert e["memory_type"] == "episodic"
+        assert e["source_episode"], "act/scene/event 溯源"
+        assert e["content_hash"]
+        assert 0 <= e["importance"] <= 1
+    # 幂等键 = event id（Campaign 跨层唯一性保证 → 条目 id 唯一）
+    assert len({e["id"] for e in entries}) == len(entries)
+
+
+def test_capture_episodic_idempotent(tmp_path):
+    """幂等：同 campaign 两次捕获不重复（id + content_hash 均命中跳过）。"""
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    first = capture_episodic(campaign, db)
+    second = capture_episodic(campaign, db)
+    assert first["total"] == second["total"]
+    assert second["inserted"] == 0, "二次捕获零新增"
+    assert len(list_entries(campaign.id, "episodic", db)) == first["total"]
+
+
+def test_capture_semantic_initial_structure(tmp_path):
+    """语义记忆：NPC 事实（subject_key=npc:<id>）+ 地点事实（place:<scene_id>），去重键就位。"""
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    stats = capture_semantic_initial(campaign, db)
+    entries = list_entries(campaign.id, "semantic", db)
+    assert len(entries) == stats["total"]
+    keys = {e["subject_key"] for e in entries}
+    npc_keys = {f"npc:{nid}" for nid in campaign.npcs}
+    assert npc_keys <= keys, "每 NPC 一条语义事实"
+    assert any(k.startswith("place:") for k in keys), "地点事实存在"
+    # 确定性抽取复用 npc_impression 视角：条目内容含 NPC 名
+    for nid, npc in campaign.npcs.items():
+        row = next(e for e in entries if e["subject_key"] == f"npc:{nid}")
+        assert npc.name in row["content"]
+
+
+def test_capture_semantic_initial_idempotent(tmp_path):
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    first = capture_semantic_initial(campaign, db)
+    second = capture_semantic_initial(campaign, db)
+    assert first["total"] == second["total"]
+    assert second["inserted"] == 0, "subject_key 去重：二次捕获零新增"
+
+
+def test_capture_memory_entries_both_types(tmp_path):
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    stats = capture_memory_entries(campaign, db)
+    assert stats["episodic"]["total"] > 0 and stats["semantic"]["total"] > 0
+    counts = count_entries(campaign.id, db)
+    assert counts["episodic"] == stats["episodic"]["total"]
+    assert counts["semantic"] == stats["semantic"]["total"]
+    assert counts["shortterm"] == 0 and counts["longterm"] == 0, "P1 才填充保留时限轴"
+
+
+def test_pipeline_compose_writes_memory_entries(tmp_path):
+    """compose 收敛点：跑管线后 memory_entries.sqlite 落盘并含情景+语义。"""
+    settings = make_settings(tmp_path)
+    campaign, _ = run_campaign(tmp_path, settings=settings)
+    db = entries_db_path(settings)
+    assert db.exists(), "compose 后 memory_entries.sqlite 落盘（尊重 store_dir）"
+    assert list_entries(campaign.id, "episodic", db), "情景记忆已写入"
+    assert list_entries(campaign.id, "semantic", db), "语义记忆已写入"
+
+
+def test_assemble_memory_context_empty_without_history(tmp_path):
+    """无历史 → 空串（首轮生成零影响，保持确定性）。"""
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    # compose 已为该 campaign 写入历史；用未跑过 compose 的 campaign 验证空历史
+    assert assemble_memory_context("campaign-ghost", "失踪案", db_path=db) == ""
+    # 全新 db（未写入任何条目）→ 空串
+    fresh_db = entries_db_path(make_settings(tmp_path / "fresh"))
+    assert assemble_memory_context(campaign.id, "失踪案", db_path=fresh_db) == ""
+
+
+def test_assemble_memory_context_retrieves_relevant(tmp_path):
+    """有历史 → BM25 检索命中相关条目，命中条目内容出现在上下文中。"""
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    capture_memory_entries(campaign, db)
+    first_ev_title = campaign.acts[0].scenes[0].events[0].title
+    ctx = assemble_memory_context(campaign.id, f"{first_ev_title} 发生了什么", db_path=db)
+    assert ctx.startswith("【既有记忆】")
+    assert "（情景记忆）" in ctx or "（语义记忆）" in ctx
+    assert first_ev_title in ctx, "相关事件标题被 BM25 检索命中"
+
+
+def test_render_entries_doc_groups_by_type(tmp_path):
+    campaign, _ = run_campaign(tmp_path)
+    db = entries_db_path(make_settings(tmp_path))
+    capture_memory_entries(campaign, db)
+    entries = list_entries(campaign.id, db_path=db)
+    doc = render_entries_doc(campaign.id, entries)
+    assert "## 记忆条目（四类）" in doc
+    assert "### 情景记忆" in doc and "### 语义记忆" in doc
+    assert "### 短期记忆" not in doc and "### 长期记忆" not in doc, "P1 前不出现空分组"
+    assert doc.rstrip().endswith("〕"), "语义记忆条目行尾带 source 溯源"
+
+
+def test_memories_cli_lists_four_types(tmp_path):
+    """CLI memories 升级：聚合视角后追加四类条目节（现有聚合断言保持）。"""
+    settings = make_settings(tmp_path)
+    campaign, _ = run_campaign(tmp_path, settings=settings)
+    old = config._settings
+    config._settings = settings
+    try:
+        r = runner.invoke(app, ["memories", campaign.id])
+    finally:
+        config._settings = old
+    assert r.exit_code == 0, r.stdout
+    assert "NPC 印象" in r.stdout and "世界状态" in r.stdout  # 聚合视角不变
+    assert "记忆条目（四类）" in r.stdout
+    assert "情景记忆" in r.stdout and "语义记忆" in r.stdout
+    # 语义记忆内容来自 npc_impression：含 NPC 名
+    for npc in campaign.npcs.values():
+        assert npc.name in r.stdout
+
+
+def test_memories_cli_unknown_campaign_still_empty(tmp_path):
+    """未知 campaign：聚合输出「暂无」，四类无条目不追加（退出码 0）。"""
+    settings = make_settings(tmp_path)
+    old = config._settings
+    config._settings = settings
+    try:
+        r = runner.invoke(app, ["memories", "campaign-ghost"])
+    finally:
+        config._settings = old
+    assert r.exit_code == 0, r.stdout
+    assert "暂无" in r.stdout
+    assert "记忆条目（四类）" not in r.stdout

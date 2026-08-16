@@ -391,17 +391,26 @@ def regenerate_command(
 def memories_command(
     campaign: str = typer.Argument(..., help="campaign id（或 campaign JSON 路径）"),
 ) -> None:
-    """⑧ 跨会话记忆：列出该 campaign 的已存记忆事实（NPC 印象 / 关键事件 / 世界状态摘要）。
+    """⑧ 跨会话记忆：聚合视角（NPC 印象 / 关键事件 / 世界状态）+ 四类记忆条目。
 
-    读 settings.store_dir 落盘的 store（缺省 data/store/memory.sqlite）；
-    无事实时输出「暂无」提示（退出码 0）。
+    读 settings.store_dir 落盘的 store（缺省 data/store/memory.sqlite）与
+    memory_entries（memory_entries.sqlite，P0-a 增量层）；
+    均无记忆时输出「暂无」提示（退出码 0）。
     """
     try:
         from tindalos.memory import build_store, list_memories
+        from tindalos.memory_entries import entries_db_path, list_entries, render_entries_doc
 
-        store = build_store(get_settings())
+        settings = get_settings()
+        store = build_store(settings)
         cid = _resolve_campaign_id(campaign)
-        typer.echo(list_memories(store, cid))
+        text = list_memories(store, cid)
+        entries = list_entries(cid, db_path=entries_db_path(settings))
+        if entries:
+            entries_doc = render_entries_doc(cid, entries)
+            if entries_doc:
+                text = f"{text}\n\n{entries_doc}"
+        typer.echo(text)
     except (OSError, ValueError) as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
