@@ -45,11 +45,11 @@ export const NODE_DIMS: Record<NodeType, { width: number; height: number }> = {
 
 /** 五类节点的展示元信息（图例 / MiniMap / 徽章）。 */
 export const NODE_TYPE_META: NodeTypeMeta[] = [
-  { type: 'act', label: '幕 Act', color: '#D64545', cssClass: 'tn-node--act' },
-  { type: 'scene', label: '场景 Scene', color: '#E8620C', cssClass: 'tn-node--scene' },
-  { type: 'event', label: '事件 Event', color: '#6B7A55', cssClass: 'tn-node--event' },
-  { type: 'npc', label: 'NPC', color: '#3E4A5A', cssClass: 'tn-node--npc' },
-  { type: 'clue', label: '线索 Clue', color: '#4A3B28', cssClass: 'tn-node--clue' },
+  { type: 'act', label: '幕 Act', color: 'var(--t-rule-red)', cssClass: 'tn-node--act' },
+  { type: 'scene', label: '场景 Scene', color: 'var(--t-orange)', cssClass: 'tn-node--scene' },
+  { type: 'event', label: '事件 Event', color: 'var(--t-verdigris)', cssClass: 'tn-node--event' },
+  { type: 'npc', label: 'NPC', color: 'var(--t-inkblue)', cssClass: 'tn-node--npc' },
+  { type: 'clue', label: '线索 Clue', color: 'var(--t-sepia-ink)', cssClass: 'tn-node--clue' },
 ];
 
 export const EDGE_KIND_META = [
@@ -59,11 +59,11 @@ export const EDGE_KIND_META = [
 ] as const;
 
 export const NODE_TYPE_COLORS: Record<NodeType, string> = {
-  act: '#D64545',
-  scene: '#E8620C',
-  event: '#6B7A55',
-  npc: '#3E4A5A',
-  clue: '#4A3B28',
+  act: 'var(--t-rule-red)',
+  scene: 'var(--t-orange)',
+  event: 'var(--t-verdigris)',
+  npc: 'var(--t-inkblue)',
+  clue: 'var(--t-sepia-ink)',
 };
 
 /** 默认空节点（未知类型兜底）。 */

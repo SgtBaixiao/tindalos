@@ -200,8 +200,9 @@
 }
 
 /* --- 图例（bottom-left 悬浮面板） --- */
+/* 不得设置 position，否则会覆盖 .react-flow__panel 的 position:absolute，
+   把图例从悬浮角标变成画布底部的全宽横条（历史 bug，勿回退）。 */
 .tn-legend {
-  position: relative;
   background-color: var(--t-paper-deep);
   border: 1px solid var(--t-line);
   border-radius: 10px;

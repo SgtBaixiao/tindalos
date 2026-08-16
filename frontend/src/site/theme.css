@@ -449,6 +449,12 @@ body {
 .sx-workbench .tn-canvas .tn-progress {
   display: none;
 }
+/* bar 里的 .tn-progress 本是画布底部绝对定位，改回流式，避免对齐视口底部漂移 */
+.sx-workbench .sx-workbench__band .tn-progress {
+  position: static;
+  transform: none;
+  width: 100%;
+}
 
 /* ------------------------------------------------------------------
  * 工作台嵌入站点的令牌统一（关键：让 Tindalos --t-* 层继承纸墨语言）
@@ -490,6 +496,7 @@ body {
   /* 字体跟随站点 */
   --t-font-body: var(--sx-font-body);
   --t-font-mono: var(--sx-font-mono);
+  --t-font-display: var(--sx-font-body); /* 节点/图例标题也走站点正文体，弃 Avant Garde 展示体 */
 }
 
 /* 深色：仅反转手挑强调色（纸墨基座已由 var(--sx-*) 自动反转） */
@@ -503,6 +510,44 @@ body {
   --t-verdigris-deep: #9ab4a5;
   --t-inkblue: #9aa1bd;
   --t-sepia-ink: #b8ac96;
+}
+
+/* ---------- 工作台局部精修：控件对齐站点语言（pill / hairline / 墨阶） ---------- */
+.sx-workbench .tn-btn {
+  border-radius: 999px;                    /* 站点 pill 按钮（.sx-btn） */
+  border-color: var(--sx-line-strong);
+  background-color: transparent;
+  transition:
+    color var(--sx-ease),
+    border-color var(--sx-ease),
+    background-color var(--sx-ease);
+}
+.sx-workbench .tn-btn:hover:not(:disabled) {
+  border-color: var(--sx-ink);
+  color: var(--sx-ink);
+  background-color: var(--sx-paper-deep);
+}
+.sx-workbench .tn-btn--primary {
+  background-color: var(--sx-ink);
+  border-color: var(--sx-ink);
+  color: var(--sx-paper);
+}
+.sx-workbench .tn-btn--primary:hover:not(:disabled) {
+  background-color: var(--sx-ink-soft);
+  border-color: var(--sx-ink);
+  color: var(--sx-paper);
+}
+
+/* 顶栏 mark：墨圆纸字，去强调色 */
+.sx-workbench .tn-topbar__mark {
+  background-color: var(--sx-ink);
+  color: var(--sx-paper);
+}
+
+/* 节点卡片圆角对齐站点卡片（16px 家族 → 折中 12px），分隔条 hairline 已由
+   --t-rule-red=var(--sx-ink) 收敛，这里只对齐轮廓语言 */
+.sx-workbench .tn-node {
+  border-radius: 12px;
 }
 
 /* ---------- 资料库 Library ---------- */

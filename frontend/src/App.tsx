@@ -26,7 +26,9 @@ type Theme = 'light' | 'dark';
 function initialTheme(): Theme {
   const saved = localStorage.getItem('tindalos-theme');
   if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // 跟随主站默认纸白（SiteApp 对未设置的主题强制 light）；不读 OS 深色偏好，
+  // 否则深色系统的用户一进来整站被翻成墨黑（黑块 + 节点隐形）。
+  return 'light';
 }
 
 /** 三类边的样式：flow 实线 / branch 虚线 / reference 点划线（§3.4）。 */
@@ -103,7 +105,7 @@ export default function App() {
   );
 
   const miniMapColor = useCallback(
-    (node: GraphNode) => NODE_TYPE_COLORS[node.type] ?? '#8A7F6D',
+    (node: GraphNode) => NODE_TYPE_COLORS[node.type] ?? 'var(--t-ink-faint)',
     [],
   );
 
@@ -151,7 +153,6 @@ export default function App() {
             nodeColor={miniMapColor}
             nodeStrokeColor="transparent"
             nodeBorderRadius={4}
-            maskColor="rgba(43,38,32,0.06)"
           />
           <Controls />
           <Legend />
