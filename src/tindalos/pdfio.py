@@ -10,17 +10,25 @@
   - PdfParseInfo  {path, sha256, pages, chars, texts, images}
 页面坐标单位为 PDF pt（72/in）。图像以 PNG 落盘到调用方给定的输出目录
 （`data/modules/<module_id>/images/img-p<page>-<n>.png`），文本按页拼接。
+
+图像提取逐图容错：CMYK 等非 RGB 编码的 PIL 图像先转 RGB 再存 PNG（Pillow 无法
+把 CMYK 直接写 PNG，OSError 会拖垮整次上传）；单个图像在解码/转 PIL/落盘任一步
+失败仅跳过该图并告警（注明页码与索引），绝不抛出让 analyze_pdf 整体失败；
+analyze_pdf 对损坏/极小 PDF 也容错返回空结果。
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import pypdfium2 as pdfium
 from pypdfium2 import _helpers as h
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -95,8 +103,31 @@ def extract_pages(path: str | Path) -> list[PageText]:
         doc.close()
 
 
+def _save_pil_png(pil: Any, dest: Path) -> None:
+    """把 PIL 图像以 RGB 形式原子落盘 PNG（防 CMYK 崩溃 / 防孤儿残骸）。
+
+    Pillow 无法把 CMYK 编码的 PIL 图像存为 PNG（OSError "cannot write mode CMYK
+    as PNG"），保存前若模式非 RGB 先 convert("RGB") 保图；先写临时文件再
+    os.replace 原子改名，任一步失败清理临时文件后重抛，由调用方跳过该图——
+    不留下半截孤儿 .png。
+    """
+    if pil.mode != "RGB":
+        pil = pil.convert("RGB")
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        pil.save(tmp, format="PNG")
+        tmp.replace(dest)
+    except Exception:  # noqa: BLE001 - 调用方按单图失败处理（跳过 + 告警）
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def _extract_page_images(page_no: int, page: h.PdfPage, out_dir: Path) -> list[PdfImageInfo]:
-    """提取单页内嵌图像对象 → PNG 落盘。bbox 记录页内坐标（PDF pt）。"""
+    """提取单页内嵌图像对象 → PNG 落盘。bbox 记录页内坐标（PDF pt）。
+
+    逐图容错：单个图像在解码 / 转 PIL / 转 RGB / 落盘任一步失败仅跳过该图并告警
+    （注明页码与索引），绝不抛出让 analyze_pdf 整体失败。
+    """
     infos: list[PdfImageInfo] = []
     idx = 0
     for obj in page.get_objects():
@@ -110,26 +141,34 @@ def _extract_page_images(page_no: int, page: h.PdfPage, out_dir: Path) -> list[P
         try:
             bitmap = obj.get_bitmap()
         except Exception:  # noqa: BLE001 - 个别损坏/嵌套对象跳过
+            logger.warning("PDF 第 %d 页第 %d 张图像解码失败，跳过", page_no, idx)
             continue
         try:
-            pil = bitmap.to_pil()
+            try:
+                pil = bitmap.to_pil()
+            except Exception:  # noqa: BLE001 - 单图转 PIL 失败仅跳过
+                logger.warning("PDF 第 %d 页第 %d 张图像转 PIL 失败，跳过", page_no, idx)
+                continue
             w, hh = pil.size
+            name = f"img-p{page_no}-{idx}.png"
+            dest = out_dir / name
+            try:
+                _save_pil_png(pil, dest)
+            except Exception:  # noqa: BLE001 - 单图落盘失败仅跳过，不拖垮整页
+                logger.warning("PDF 第 %d 页第 %d 张图像保存 PNG 失败，跳过", page_no, idx)
+                continue
+            infos.append(
+                PdfImageInfo(
+                    page_no=page_no,
+                    index=idx,
+                    bbox={"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
+                    width=w,
+                    height=hh,
+                    saved_path=str(dest),
+                )
+            )
         finally:
             bitmap.close()
-        name = f"img-p{page_no}-{idx}.png"
-        dest = out_dir / name
-        # 二进制写，不涉及编码
-        pil.save(dest, format="PNG")
-        infos.append(
-            PdfImageInfo(
-                page_no=page_no,
-                index=idx,
-                bbox={"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
-                width=w,
-                height=hh,
-                saved_path=str(dest),
-            )
-        )
     return infos
 
 
@@ -172,18 +211,29 @@ def render_page(path: str | Path, page_no: int, *, scale: float = 1.5) -> "objec
 
 
 def analyze_pdf(path: str | Path, out_dir: str | Path | None = None) -> PdfParseInfo:
-    """一站式解析：sha256 + 逐页文本 + 图像提取（out_dir 提供时）。"""
+    """一站式解析：sha256 + 逐页文本 + 图像提取（out_dir 提供时）。
+
+    损坏/极小 PDF 容错：文档打不开时返回仅含 sha256 的空结果并告警，不抛异常
+    （上传管线不因单个坏文件整体失败；坏图按页内逐图跳过，见 _extract_page_images）。
+    """
     path = Path(path)
-    texts = extract_pages(path)
-    infos = PdfParseInfo(
-        path=str(path),
-        sha256=sha256_of(path),
-        pages=len(texts),
-        chars=sum(len(t.text) for t in texts),
-        texts=texts,
-    )
-    if out_dir is not None:
-        infos.images = extract_images(path, out_dir)
+    try:
+        texts = extract_pages(path)
+        infos = PdfParseInfo(
+            path=str(path),
+            sha256=sha256_of(path),
+            pages=len(texts),
+            chars=sum(len(t.text) for t in texts),
+            texts=texts,
+        )
+    except Exception:  # noqa: BLE001 - 容错：坏 PDF 不拖垮上传管线
+        logger.warning("PDF 解析失败（损坏/非法文件），返回空结果：%s", path)
+        infos = PdfParseInfo(path=str(path), sha256=sha256_of(path), pages=0, chars=0)
+    if out_dir is not None and infos.pages > 0:
+        try:
+            infos.images = extract_images(path, out_dir)
+        except Exception:  # noqa: BLE001 - 图像层失败不拖垮文本解析
+            logger.warning("PDF 图像提取失败，跳过图像：%s", path)
     return infos
 
 

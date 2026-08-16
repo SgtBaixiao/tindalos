@@ -53,10 +53,14 @@ def client(tmp_path, monkeypatch):
 
 
 def _fake_generate(events: list[tuple[str, str]], campaign: dict):
-    """确定性伪生成：逐条 emit(stage,message)，返回 campaign dict。"""
+    """确定性伪生成：逐条 emit(stage,message)，返回 campaign dict。
+
+    module_images 为新增的关键字透传（spec §四.3）：api_generate 无条件传该参数，
+    fake 同样接收并忽略（不影响既有断言）。
+    """
     emitted: list[tuple[str, str]] = []
 
-    def gen(module_text: str, llm: bool, emit) -> dict:
+    def gen(module_text: str, llm: bool, emit, *, module_images=None) -> dict:
         for stage, message in events:
             assert emit(stage, message) is True
             emitted.append((stage, message))
@@ -179,7 +183,7 @@ def test_generate_empty_400(client):
 def test_generate_failure_sse_error_frame(client, monkeypatch):
     """生成抛异常 → SSE 错误帧 + done:true/campaign:null（前端据此中止 Loading）。"""
 
-    def boom(module_text: str, llm: bool, emit):
+    def boom(module_text: str, llm: bool, emit, *, module_images=None):
         raise RuntimeError("pipeline broke")
 
     monkeypatch.setattr(web_mod, "default_generate", boom)
@@ -480,3 +484,149 @@ def test_cli_web_command():
     result = CliRunner().invoke(app, ["web", "--help"])
     assert result.exit_code == 0
     assert "个人网站统一服务" in result.output
+
+
+# ---------------------------------------------------------------- 多模态参考 + /files 安全（spec §四.3）
+
+
+class _FakeVisionResp:
+    """transport 伪响应：恒 200，json() 返回 choices 载荷。"""
+
+    def __init__(self, payload) -> None:
+        self._payload = payload
+        self.status_code = 200
+        self.text = ""
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _FakeVisionTransport:
+    """统一客户端传输注入：记录调用，恒回 200（零网络零 LLM）。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def __call__(self, method, url, *, json=None, headers=None, timeout=None):
+        self.calls.append({"method": method, "url": url, "json": json, "headers": headers or {}, "timeout": timeout})
+        return _FakeVisionResp({"choices": [{"message": {"content": '{"ok": 1}'}}]})
+
+
+class _CannedVisionResult:
+    """伪 vision 单图结果（等价 VisionResult.to_dict()）。"""
+
+    def to_dict(self) -> dict:
+        return {
+            "image_path": "/tmp/mod/images/a.png",
+            "page_no": 1,
+            "kind": "portrait",
+            "name": "老吴",
+            "caption": "神秘富商",
+            "confidence": 0.9,
+            "needs_confirmation": False,
+            "meta": {},
+        }
+
+
+class _FakeVision:
+    """伪 vision 模块：classify_images 返回固定的识别结果（零网络零 LLM）。"""
+
+    def __init__(self) -> None:
+        self.calls: list[list] = []
+
+    def classify_images(self, infos):
+        self.calls.append(list(infos))
+        return [_CannedVisionResult()]
+
+
+@pytest.fixture()
+def fake_vision(monkeypatch):
+    """同 fake_rag 双路径补丁：api_upload 内 `from tindalos import vision` 取到伪模块。"""
+    vision = _FakeVision()
+    import tindalos as _pkg
+
+    if hasattr(_pkg, "vision"):
+        monkeypatch.setattr(_pkg, "vision", vision)
+    monkeypatch.setitem(sys.modules, "tindalos.vision", vision)
+    return vision
+
+
+def test_files_mount_restricted(client, tmp_path):
+    """/files 安全收窄：仅 modules/<id>/images/<白名单扩展> 可下载，其余（store/*、text.txt）一律 404。"""
+    data = tmp_path / "data"
+    store = data / "store"
+    store.mkdir(parents=True)
+    (store / "memory_entries.sqlite").write_bytes(b"sqlite-blob")
+    mod_dir = data / "modules" / "mod-1"
+    mod_dir.mkdir(parents=True)
+    (mod_dir / "text.txt").write_text("模组全文", encoding="utf-8")
+    img_dir = mod_dir / "images"
+    img_dir.mkdir(parents=True)
+    (img_dir / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    # 整目录泄露面：数据库与正文一律不可下载
+    assert client.get("/files/store/memory_entries.sqlite").status_code == 404
+    assert client.get("/files/modules/mod-1/text.txt").status_code == 404
+    # 图像白名单内 → 200；白名单外扩展 → 404
+    assert client.get("/files/modules/mod-1/images/a.png").status_code == 200
+    assert client.get("/files/modules/mod-1/images/a.txt").status_code == 404
+
+
+def test_generate_with_module_images(client, monkeypatch):
+    """POST /api/generate 携带 module_images → 透传 default_generate → 生成器注入图像参考（unknown 跳过）。"""
+    from tindalos.config import Settings
+    from tindalos.generator import OllamaGenerator
+
+    transport = _FakeVisionTransport()
+
+    def gen_with_images(module_text, llm, emit, *, module_images=None):
+        s = Settings()
+        s.ollama_base_url = "http://localhost:11434/v1"
+        s.model = "test-model"
+        s.llm_enabled = True
+        s.api_key = ""
+        g = OllamaGenerator(s, retry_delay=0, transport=transport)
+        g.set_module_context(module_text, title="留地不留头")
+        g.set_module_images(module_images or [])
+        g._chat("生成")
+        return _sample_campaign("c-web-img")
+
+    monkeypatch.setattr(web_mod, "default_generate", gen_with_images)
+    r = client.post(
+        "/api/generate",
+        json={
+            "module_text": "模组正文",
+            "module_images": [
+                {"kind": "portrait", "name": "老吴", "caption": "神秘富商"},
+                {"kind": "unknown", "name": None, "caption": "无法识别"},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    frames = _sse_data(r.content)
+    assert frames[-1]["done"] is True and frames[-1]["campaign"]["id"] == "c-web-img"
+
+    assert transport.calls, "生成器未发起请求"
+    prompt = transport.calls[0]["json"]["messages"][0]["content"]
+    assert "模组图像参考" in prompt
+    assert "图1（portrait）：老吴——神秘富商" in prompt
+    assert "unknown" not in prompt  # unknown 条目不渲染
+
+
+def test_upload_module_writes_vision_meta(client, fake_vision, tmp_path):
+    """上传 → asyncio.to_thread(vision.classify_images) → 识别结果写入模块 meta（Task D 解阻塞验证）。"""
+    pdf = _make_pdf(tmp_path / "vision.pdf")
+    r = client.post(
+        "/api/modules/upload",
+        files={"file": ("vision.pdf", pdf.read_bytes(), "application/pdf")},
+        data={"rules": "COC7"},
+    )
+    assert r.status_code == 201, r.text
+    assert fake_vision.calls, "classify_images 未被调用"
+    mod = r.json()["module"]
+    assert mod["images"][0]["kind"] == "portrait"
+    assert mod["images"][0]["name"] == "老吴"
+    assert mod["images"][0]["caption"] == "神秘富商"

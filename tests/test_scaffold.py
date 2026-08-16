@@ -31,7 +31,7 @@ def test_settings_defaults():
     s = config_module.get_settings()
     assert s.llm_enabled is False
     assert s.ollama_base_url == "http://localhost:11434/v1"
-    assert s.model == "deepseek-chat"  # 云端默认（2026-08-11 改为 DeepSeek）
+    assert s.model == "deepseek-r1"  # 本地 Ollama 默认（Ollama 无 deepseek-chat tag；云端才默认 deepseek-chat）
     assert s.checkpoint_dir == Path("data/checkpoints")
     assert s.store_dir == Path("data/store")
 

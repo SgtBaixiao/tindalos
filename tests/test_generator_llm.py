@@ -25,6 +25,7 @@ from tindalos.generator import (
     _parse_json,
     build_generator,
 )
+from tindalos.llm import LLMError
 
 
 # ---------------------------------------------------------------- fakes
@@ -54,14 +55,15 @@ class _FakeResp:
 
 
 class _FakeRequests:
-    """按调用序号返回预置结果（Exception 或 payload dict）；结果不足时复用最后一个。"""
+    """LLMClient transport 假实现：按调用序号返回预置结果（Exception 或 payload dict），
+    结果不足时复用最后一个；每次调用记录 payload（与旧 _FakeRequests.post 相同记录字段）。"""
 
     def __init__(self, *results) -> None:
         self._results = list(results)
         self.calls: list[dict] = []
 
-    def post(self, url, json=None, headers=None, timeout=None):
-        self.calls.append({"url": url, "json": json, "headers": headers or {}, "timeout": timeout})
+    def __call__(self, method, url, *, json=None, headers=None, timeout=None):
+        self.calls.append({"method": method, "url": url, "json": json, "headers": headers or {}, "timeout": timeout})
         idx = min(len(self.calls) - 1, len(self._results) - 1)
         r = self._results[idx]
         if isinstance(r, Exception):
@@ -83,9 +85,15 @@ def _tool_call(arguments) -> list[dict]:
 
 
 def _make_generator(fake: _FakeRequests, **kwargs) -> OllamaGenerator:
-    g = OllamaGenerator(_settings(), retry_delay=0, **kwargs)
-    g._requests = fake
-    return g
+    return OllamaGenerator(_settings(), retry_delay=0, transport=fake, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _no_sleep(monkeypatch):
+    """重试退避已收敛到 llm._sleep_backoff（generator 不再自持 retry_delay 睡眠）：测试全零延迟。"""
+    import tindalos.llm as _llm
+
+    monkeypatch.setattr(_llm, "_sleep_backoff", lambda attempt: None)
 
 
 # ---------------------------------------------------------------- _parse_json
@@ -160,8 +168,9 @@ class TestChat:
     def test_tool_call_missing_arguments_raises(self) -> None:
         fake = _FakeRequests(_msg("", tool_calls=[{"function": {}}]))
         g = _make_generator(fake)
-        with pytest.raises(ValueError):
+        with pytest.raises(LLMError) as ei:
             g._chat("gen", tools=[_SCENE_TOOL])
+        assert ei.value.kind == "parse_failed"
 
     def test_retries_on_timeout_then_success(self) -> None:
         to = requests.exceptions.ReadTimeout("read timeout")
@@ -181,15 +190,17 @@ class TestChat:
         to = requests.exceptions.ReadTimeout("read timeout")
         fake = _FakeRequests(to, to, to)
         g = _make_generator(fake, max_retries=2)
-        with pytest.raises(requests.exceptions.ReadTimeout):
+        with pytest.raises(LLMError) as ei:
             g._chat("hi")
+        assert ei.value.kind == "timeout"
         assert len(fake.calls) == 3
 
     def test_http_4xx_no_retry(self) -> None:
         fake = _FakeRequests(_FakeResp({"error": "model not found"}, status=404))
         g = _make_generator(fake, max_retries=3)
-        with pytest.raises(requests.exceptions.HTTPError):
+        with pytest.raises(LLMError) as ei:
             g._chat("hi")
+        assert ei.value.kind == "http_4xx"
         assert len(fake.calls) == 1
 
     def test_http_5xx_retried(self) -> None:
@@ -430,3 +441,64 @@ class TestGenerate:
         g = _make_generator(_FakeRequests(payload))
         acts = g.generate_acts("前提", 2)
         assert [a["id"] for a in acts] == ["act-1", "act-2"]
+
+
+# ---------------------------------------------------------------- 模组图像参考注入（spec §四.3）
+
+
+class TestModuleImagesInjection:
+    """spec §四.3：vision 分类结果（kind/name/caption）注入生成上下文。
+
+    断言都落在最终请求 prompt 上（公共 seam，与实现内部解耦）。
+    """
+
+    @staticmethod
+    def _prompt(images: list[dict]) -> str:
+        s = _settings()
+        s.api_key = ""
+        fake = _FakeRequests(_msg('[{"name": "伯纳德", "archetype": "佣兵"}]'))
+        g = _make_generator(fake)
+        g.settings = s
+        g.set_module_images(images)
+        g.generate_npcs("前提", 1)
+        return fake.calls[0]["json"]["messages"][0]["content"]
+
+    def test_images_block_injected(self) -> None:
+        prompt = self._prompt(
+            [{"kind": "portrait", "name": "老吴", "caption": "神秘富商"},
+             {"kind": "map", "name": None, "caption": "庄园地图"}]
+        )
+        assert "模组图像参考" in prompt
+        assert "图1（portrait）：老吴——神秘富商" in prompt
+        assert "图2（map）：无名字——庄园地图" in prompt
+
+    def test_unknown_image_skipped(self) -> None:
+        prompt = self._prompt(
+            [{"kind": "unknown", "name": None, "caption": "无法识别"},
+             {"kind": "scene", "name": "大厅", "caption": "阴森大厅"}]
+        )
+        assert "模组图像参考" in prompt
+        assert "图1（scene）：大厅——阴森大厅" in prompt
+        assert "unknown" not in prompt
+
+    def test_empty_list_no_block(self) -> None:
+        assert "模组图像参考" not in self._prompt([])
+
+    def test_entry_without_kind_dropped(self) -> None:
+        prompt = self._prompt([{"name": "无名图", "caption": "无 kind 不应出现"}])
+        assert "模组图像参考" not in prompt
+
+    def test_all_unknown_no_block(self) -> None:
+        assert "模组图像参考" not in self._prompt([{"kind": "unknown", "name": None, "caption": ""}])
+
+    def test_overlong_block_truncated(self) -> None:
+        from tindalos.generator import _MODULE_IMAGES_BUDGET
+
+        images = [{"kind": "scene", "name": f"图{i}", "caption": "长" * 200} for i in range(1, 21)]
+        prompt = self._prompt(images)
+        assert "模组图像参考" in prompt
+        assert "已截断" in prompt
+        assert "图1（scene）" in prompt
+        assert "图20（scene）" not in prompt
+        block = prompt[prompt.index("模组图像参考") - 1:]
+        assert len(block) <= _MODULE_IMAGES_BUDGET + 20

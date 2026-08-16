@@ -15,14 +15,12 @@ import hashlib
 import json
 import random
 import re
-import time
 import warnings
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
-
-import requests.exceptions as _rexc
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from tindalos.config import Settings, get_settings
+from tindalos.llm import LLMClient, _extract_json
 
 # ---------------------------------------------------------------- 内容池（确定性模板素材）
 
@@ -34,6 +32,9 @@ _TRAITS = ["谨慎多疑", "求知欲强", "沉默寡言", "古道热肠", "唯�
 _PLACES = ["旧图书馆", "废弃码头", "古董店", "档案馆", "城郊古宅", "雾气弥漫的小巷"]
 _TIMES = ["傍晚", "深夜", "清晨", "午夜"]
 _EVENT_KINDS = ("entry", "trigger", "outcome")
+# 模组图像参考块长度上限（字符）：与 llm_context_chars 同一量级的注入预算（默认 2000），
+# 控制生成 prompt 的 token 成本；超出时截断并加省略标记。
+_MODULE_IMAGES_BUDGET = 2000
 
 
 # ---------------------------------------------------------------- 协议
@@ -205,42 +206,11 @@ _SCENE_TOOL = {
 
 
 def _parse_json(content: str) -> Any:
-    """从模型回复提取 JSON：容忍围栏、未闭合围栏、前后缀文字与顶层数组。
+    """从模型回复提取 JSON（统一走 llm._extract_json：剥围栏 + 字符串感知平衡括号扫描）。
 
-    解析顺序：
-    1. 剥离 ```json / ```（含无语言围栏、未闭合围栏）；
-    2. 完整解析（数组/对象均可）；
-    3. 失败则截取首个 {…} 或 […] 跨度兜底（容忍说明文字包裹）。
+    保留本入口名以兼容既有调用/测试；实现与重试策略已收敛到 llm.py 统一客户端。
     """
-    if not content:
-        raise ValueError("空回复")
-    text = content.strip()
-    fence = re.search(r"```(?:[a-zA-Z]*)?\s*(.*?)(?:```|\Z)", text, re.DOTALL)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        pass
-    for open_ch, close_ch in (("{", "}"), ("[", "]")):
-        start, end = text.find(open_ch), text.rfind(close_ch)
-        if start == -1 or end <= start:
-            continue
-        try:
-            return json.loads(text[start : end + 1])
-        except (json.JSONDecodeError, ValueError):
-            continue
-    raise ValueError(f"无法从模型回复解析 JSON: {content[:120]!r}")
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    """请求异常是否值得重试：超时/连接错误、HTTP 5xx 与 429；4xx 属配置/模型问题不重试。"""
-    if isinstance(exc, (_rexc.Timeout, _rexc.ConnectionError)):
-        return True
-    if isinstance(exc, _rexc.HTTPError):
-        status = exc.response.status_code if exc.response is not None else None
-        return status is None or status >= 500 or status == 429
-    return False
+    return _extract_json(content)
 
 
 class OllamaGenerator:
@@ -251,6 +221,9 @@ class OllamaGenerator:
 
     timeout / max_retries / retry_delay 可经构造参数覆盖，缺省取 settings.llm_timeout
     / llm_max_retries（环境变量 TINDALOS_LLM_TIMEOUT / TINDALOS_LLM_MAX_RETRIES）。
+
+    在线调用收敛到统一 LLMClient（2026-08-16 架构优化）：重试/JSON 容错/错误分类/
+    requests 可选依赖均由 llm.py 承担；transport 可注入（测试用 fake，零网络）。
     """
 
     def __init__(
@@ -260,23 +233,22 @@ class OllamaGenerator:
         timeout: float | None = None,
         max_retries: int | None = None,
         retry_delay: float = 1.0,
+        transport: Callable | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.timeout = float(timeout if timeout is not None else self.settings.llm_timeout)
         self.max_retries = int(max_retries if max_retries is not None else self.settings.llm_max_retries)
-        self.retry_delay = float(retry_delay)
+        self.retry_delay = float(retry_delay)  # 兼容保留：退避已由 LLMClient._sleep_backoff 接管
+        self._transport = transport
+        self._client: LLMClient | None = None  # 惰性构建：settings 可能被外部重新赋值
         self._fallback = DeterministicGenerator()
         self._module_context = ""
         self._module_title = ""
+        # 模组图像视觉识别参考（spec §四.3）：kind/name/caption 注入生成上下文；空列表不注入。
+        self._module_images: list[dict] = []
         # 风格与设计规范（references/style-guide.md，源自守秘人规则书 + 官方模组）：
         # 开关关闭或文件缺失时为空串 → _ctx 不注入，行为与旧版一致。
         self._style_guide = self._load_style_guide()
-        try:
-            import requests  # 延迟导入：离线环境不强制依赖
-
-            self._requests = requests
-        except ImportError:  # pragma: no cover - requests 缺失时退化为确定性
-            self._requests = None
 
     def _load_style_guide(self) -> str:
         """读取风格规范文件（截断至 6000 字符控制 token 成本）；不可用返回空串。"""
@@ -297,11 +269,51 @@ class OllamaGenerator:
         limit = getattr(self.settings, "llm_context_chars", 12000) or 0
         self._module_context = text[:limit] if limit and text else (text if not limit else "")
 
+    # -- 模组图像参考注入（spec §四.3，2026-08-17） ---------------
+    def set_module_images(self, images: list[dict]) -> None:
+        """注入模组图像的视觉识别参考（kind/name/caption）。仅保留含 kind 的条目（拷贝存入）。"""
+        kept: list[dict] = []
+        for img in images or []:
+            if isinstance(img, dict) and img.get("kind"):
+                kept.append(dict(img))
+        self._module_images = kept
+
+    def _module_images_block(self) -> str:
+        """模组图像参考块：仅含 kind≠unknown 的图像，每图一行；整体上限 _MODULE_IMAGES_BUDGET。
+
+        预算与 llm_context_chars 同一量级（默认 2000）：控制注入 prompt 的 token 成本，
+        超出时截断并加省略标记；全部不可用（无 kind / 全 unknown）返回空串 → 不注入。
+        """
+        budget = _MODULE_IMAGES_BUDGET
+        header = "【模组图像参考（生成时可参考以下图像的视觉识别结果）】\n"
+        lines: list[str] = []
+        used = len(header)
+        n = 0
+        for img in self._module_images:
+            kind = str(img.get("kind") or "").strip()
+            if not kind or kind == "unknown":  # unknown 无可用信息，跳过
+                continue
+            n += 1
+            name = img.get("name")
+            name = str(name).strip() if name else "无名字"
+            caption = str(img.get("caption") or "").strip()
+            line = f"图{n}（{kind}）：{name}——{caption}" if caption else f"图{n}（{kind}）：{name}"
+            cost = len(line) + 1  # 含换行
+            if used + cost > budget:
+                lines.append("……（图像参考过长，已截断）")
+                break
+            lines.append(line)
+            used += cost
+        if not lines:
+            return ""
+        return header + "\n".join(lines)
+
     def _ctx(self) -> str:
-        """prompt 追加的背景块（风格规范 + 模组背景；均为空则不注入）。
+        """prompt 追加的背景块（风格规范 + 模组背景 + 图像参考；均为空则不注入）。
 
         风格规范（洛氏恐怖风格 / KP 把控 / 剧情设计）在 _chat 层统一应用，
-        覆盖所有生成 prompt；模组背景紧随其后作为事实依据。
+        覆盖所有生成 prompt；模组背景紧随其后作为事实依据；图像参考块位于最末
+        （仅当 set_module_images 注入了可用的识别结果时出现）。
         """
         blocks: list[str] = []
         if self._style_guide:
@@ -316,46 +328,31 @@ class OllamaGenerator:
                 else "模组背景资料（生成内容须忠实于以下背景）：\n"
             )
             blocks.append(head + self._module_context)
+        if self._module_images:
+            img_block = self._module_images_block()
+            if img_block:
+                blocks.append(img_block)
         return "\n\n".join(blocks)
+
+    def _ensure_client(self) -> LLMClient:
+        """惰性构建统一客户端；settings 被重新赋值（换 settings 实例）时按当前实例重建。"""
+        if self._client is None or self._client.settings is not self.settings:
+            self._client = LLMClient(self.settings, transport=self._transport)
+        return self._client
 
     # -- 底层对话 ------------------------------------------------
     def _chat(self, prompt: str, *, tools: list[dict] | None = None) -> str:
-        if self._requests is None:
-            raise RuntimeError("requests 不可用")
-        url = f"{self.settings.ollama_base_url.rstrip('/')}/chat/completions"
-        headers = {"Content-Type": "application/json"}
-        if self.settings.api_key:  # 云端 API（DeepSeek/Kimi/GLM/Qwen 等）需 Bearer 头
-            headers["Authorization"] = f"Bearer {self.settings.api_key}"
-        payload: dict[str, Any] = {
-            "model": self.settings.model,
-            "messages": [{"role": "user", "content": prompt + self._ctx()}],
-            "temperature": 0.7,
-        }
-        if tools:
-            payload["tools"] = tools
-        last_exc: BaseException | None = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                resp = self._requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-                resp.raise_for_status()
-                data = resp.json()
-                message = data["choices"][0]["message"]
-                tool_calls = message.get("tool_calls")
-                if tool_calls:  # function calling 分支：提取首个工具调用的 arguments
-                    fn = tool_calls[0].get("function", {})
-                    args = fn.get("arguments")
-                    if isinstance(args, str) and args.strip():
-                        return args
-                    if isinstance(args, dict):
-                        return json.dumps(args, ensure_ascii=False)
-                    raise ValueError("tool_calls 缺少 function.arguments（无法解析）")
-                return message.get("content", "")
-            except Exception as e:  # noqa: BLE001 - 网络/解析异常统一按可重试性处理
-                last_exc = e
-                if attempt >= self.max_retries or not _is_retryable(e):
-                    raise
-                time.sleep(self.retry_delay)
-        raise last_exc  # pragma: no cover - 循环必然 raise 或 return
+        """单轮对话：统一走 LLMClient.chat（重试/工具调用/JSON 容错/错误分类在 llm.py）。
+
+        返回 message.content 或首个 tool_call 的 arguments（str/dict 均已归一为字符串）。
+        """
+        return self._ensure_client().chat(
+            [{"role": "user", "content": prompt + self._ctx()}],
+            tools=tools,
+            temperature=0.7,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
 
     def _generate(self, prompt: str, tools: list[dict] | None = None) -> tuple[Any, BaseException | None]:
         """返回 (解析结果, 异常)。异常透传根因（不吞栈）：调用方在告警中带类型与消息。"""

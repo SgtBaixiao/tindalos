@@ -61,6 +61,14 @@ export TINDALOS_API_KEY=sk-...                    # DeepSeek 等云端 key
 export TINDALOS_API_BASE=https://api.deepseek.com/v1   # 任意 OpenAI 兼容端点
 export TINDALOS_MODEL=deepseek-chat                # kimi-k3 / glm-4-plus / qwen-plus ...
 
+# 多模态（可选）：PDF 图像识别（人物像/地图/场景/封面）+ 向量检索问答
+export TINDALOS_VL_KEY=sk-...             # 视觉/向量 key（默认 SiliconFlow 硅基流动）
+export TINDALOS_VL_MODEL=Qwen/Qwen3-VL-8B-Instruct   # 视觉模型（默认即此）
+export TINDALOS_EMBED_MODEL=BAAI/bge-m3   # 向量模型（默认即此）
+# 进阶：TINDALOS_VL_BASE / TINDALOS_EMBED_BASE 自定义视觉/向量端点；
+#       TINDALOS_EMBED_KEY 独立向量 key（缺省复用 VL key）；
+#       旧名 TINDALOS_DASHSCOPE_KEY / DASHSCOPE_API_KEY 仍兼容（优先级低于规范名）。
+
 # 一键本地全流程（PDF/模组 → 结构化 → 生成 → eval → evolve → 记忆）
 bash scripts/run-module.sh "留地不留头.pdf" data/output
 ```
@@ -75,7 +83,7 @@ bash scripts/run-module.sh "留地不留头.pdf" data/output
 | Moonshot Kimi | `https://api.moonshot.cn/v1` | `kimi-k3`（524K 上下文） | 求职目标公司；超大上下文 |
 | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus` | 国产老牌 |
 | 通义 Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | 阿里 |
-| SiliconFlow | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` 等 | 聚合平台 |
+| **SiliconFlow**（多模态实测 ✅） | `https://api.siliconflow.cn/v1` | `Qwen/Qwen3-VL-8B-Instruct` + `BAAI/bge-m3` | 聚合平台；**视觉/向量默认供应商** |
 
 **模组全文注入**（loop 迭代改进）：LLM 生成时自动把模组正文（截断至 `TINDALOS_LLM_CONTEXT`，默认 16000 字符）作为背景注入 prompt——剧本真正基于模组内容（幕名/地点/NPC/事件都取自模组），而非只依赖首段前提。
 
@@ -228,6 +236,26 @@ bash examples/llm-demo.sh
   int id / 非法事件 kind 等做规整；
 - 因此即使模型名错误/服务不可用，`generate --llm` 仍成功退出（产出确定性 campaign），
   评测/自进化照常执行——LLM 是可选的“增强层”，不是硬依赖。
+
+## 运行时验证（LLM 层是否真的能用）
+
+`scripts/verify_llm.py` 对**五个调用面**逐一发真请求，验证 URL/JSON/状态码/重试：
+生成（`generator`）· 裁判（`judge`）· RAG 问答（`rag-qa`）· 向量（`embed`）· 视觉（`vision`），
+外加一条 500→退避重试路径与裁判契约（`response_format=json_object` + `temperature=0`）。
+
+```bash
+python scripts/verify_llm.py            # 默认 mock：本地假 OpenAI 服务，零 key 零外网
+python scripts/verify_llm.py --real     # 真实 API：先配好上方环境变量再跑（退出码 0=全通）
+```
+
+**快速连通自检**（不用脚本，一条命令）：`tindalos doctor` 对 主 LLM chat / 视觉 VL / 向量 embedding
+三路各发一条最小真请求（只读、不改任何数据），失败按 无 key / key 无效(4xx) / 端点不通(连接/超时)
+分层给中文提示；退出码位掩码可脚本判断：`bit0=chat 失败 bit1=vision 失败 bit2=embed 失败`。
+
+```bash
+tindalos doctor                      # 三路连通性探测（默认每路 15s 超时）
+tindalos doctor --timeout 5          # 快检：缩短超时
+```
 
 ## 为什么做这个项目（求职叙事）
 

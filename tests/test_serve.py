@@ -411,3 +411,37 @@ def test_options_preflight_cors():
     assert headers.get("access-control-allow-origin") == "*"
     assert "POST" in headers.get("access-control-allow-methods", "")
     assert headers.get("access-control-allow-headers") == "Content-Type"
+
+
+def test_default_generate_forwards_module_images(monkeypatch):
+    """default_generate 透传 module_images → generator.set_module_images（spec §四.3 接线）。
+
+    不跑 LangGraph 管线（monkeypatch build_pipeline），仅验证 kwargs 透传与返回契约。
+    """
+    import tindalos.pipeline as pipeline_mod
+    import tindalos.serve as serve_mod
+    from tindalos.models import construct_loose_campaign
+
+    seen: dict = {}
+
+    class _Recorder:
+        def set_module_context(self, text, title=""):
+            seen["context"] = (text, title)
+
+        def set_module_images(self, images):
+            seen["images"] = images
+
+    class _FakeApp:
+        def stream(self, inputs, config=None, stream_mode=None):
+            yield "values", {"campaign": construct_loose_campaign(dict(FAKE_CAMPAIGN))}
+
+    monkeypatch.setattr(serve_mod, "_resolve_serve_generator", lambda llm: _Recorder())
+    # build_pipeline 在 default_generate 内部 `from tindalos.pipeline import build_pipeline` 取，
+    # 故补丁须打在 tindalos.pipeline 模块属性上（serve 顶层无该名字）。
+    monkeypatch.setattr(pipeline_mod, "build_pipeline", lambda generator: _FakeApp())
+
+    imgs = [{"kind": "portrait", "name": "老吴", "caption": "神秘富商"}]
+    out = serve_mod.default_generate("模组文本", False, lambda stage, msg: True, module_images=imgs)
+    assert out["id"] == "campaign-test-1"
+    assert seen["images"] == imgs
+    assert seen["context"][0] == "模组文本"

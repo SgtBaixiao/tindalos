@@ -7,7 +7,7 @@
 - 预算估算含 CoT 开销；超限跳 L3 的路径仍绿
 - run_eval L3 调用后 judge_model / self_preference_risk 落 trace（含落盘回放）
 
-零网络：全部走 FakeLLM stub / monkeypatch urlopen。
+零网络：全部走 FakeLLM stub / FakeTransport 注入（LLMClient transport），不发真实请求。
 """
 import json
 import sys
@@ -20,7 +20,7 @@ if str(_SRC) not in sys.path:
 from tindalos import eval_store, kg
 from tindalos.config import Settings
 from tindalos.eval_.deterministic import run_deterministic
-from tindalos.eval_.judge import JUDGE_PROMPT, LLMJudge, _extract_json_object, parse_judge_json
+from tindalos.eval_.judge import JUDGE_PROMPT, LLMJudge, _default_client, _extract_json_object, parse_judge_json
 from tindalos.eval_.runner import estimate_usd, run_eval
 from tindalos.models import (
     Act,
@@ -100,6 +100,34 @@ def _empty_search(query, module_id=None):
 def _det(campaign=None):
     c = campaign or make_good_campaign()
     return run_deterministic(c, kg.build_from_campaign(c))
+
+
+class FakeResp:
+    """LLMClient transport 返回值（ResponseLike）：status_code / text / json()。"""
+
+    def __init__(self, status=200, json_data=None, text=""):
+        self.status_code = status
+        self._json_data = json_data
+        self.text = text or (json.dumps(json_data, ensure_ascii=False) if json_data is not None else "")
+
+    def json(self):
+        return self._json_data
+
+
+class FakeTransport:
+    """LLMClient transport 注入：记录每次调用，返回预设响应（零网络）。"""
+
+    def __init__(self, resp):
+        self.calls = []
+        self._resp = resp
+
+    def __call__(self, method, url, *, json=None, headers=None, timeout=None):
+        self.calls.append({"method": method, "url": url, "json": json, "headers": headers, "timeout": timeout})
+        return self._resp
+
+
+def ok_chat(content):
+    return FakeResp(200, {"choices": [{"message": {"content": content}}]})
 
 
 # --------------------------------------------------------------------------- #
@@ -220,35 +248,48 @@ def test_judge_model_env_override_and_risk_flag(monkeypatch):
     assert res["self_preference_risk"] is False          # 与生成不同模型 → 无风险
 
 
-def test_default_client_temperature_zero(monkeypatch):
+def test_default_client_temperature_zero():
     """默认 HTTP client 的请求体 temperature 必须为 0（设计文档明确）。"""
-    captured = {}
-
-    class FakeResp:
-        def read(self):
-            return b'{"choices": [{"message": {"content": "{}"}}]}'
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    def fake_urlopen(req, timeout=60):
-        captured["body"] = json.loads(req.data.decode("utf-8"))
-        captured["timeout"] = timeout
-        return FakeResp()
-
-    import tindalos.eval_.judge as judge_mod
-    monkeypatch.setattr(judge_mod.urllib.request, "urlopen", fake_urlopen)
-
-    client = judge_mod._default_client(
-        Settings(ollama_base_url="http://localhost:11434/v1", model="deepseek-chat")
+    fake = FakeTransport(ok_chat("{}"))
+    client = _default_client(
+        Settings(ollama_base_url="http://localhost:11434/v1", model="deepseek-chat"),
+        transport=fake,
     )
     client([{"role": "user", "content": "hi"}])
 
-    assert captured["body"]["temperature"] == 0
-    assert captured["body"]["model"] == "deepseek-chat"
+    call = fake.calls[0]
+    assert call["json"]["temperature"] == 0
+    assert call["json"]["model"] == "deepseek-chat"
+    assert call["json"]["response_format"] == {"type": "json_object"}
+    assert call["url"].endswith("/chat/completions")
+
+
+def test_enabled_override_off_direction():
+    """enabled=False 覆盖：settings.llm_enabled=True 也禁用（不调 client）。"""
+    fake = FakeLLM(VALID_COT)
+    j = LLMJudge(settings=Settings(llm_enabled=True), enabled=False, client=fake)
+    res = j.evaluate(make_good_campaign(), None, _det())
+    assert res["judge"] == "none"
+    assert res["reason"] == "llm_disabled"
+    assert fake.messages is None                    # 强关方向生效：绝不调 client
+
+
+def test_enabled_override_cannot_force_on():
+    """enabled=True 无法强开：settings.llm_enabled=False 仍禁用。"""
+    j = LLMJudge(settings=Settings(llm_enabled=False), enabled=True, client=FakeLLM(VALID_COT))
+    res = j.evaluate(make_good_campaign(), None, _det())
+    assert res["judge"] == "none"
+    assert res["reason"] == "llm_disabled"
+
+
+def test_transport_uses_judge_model_in_body(monkeypatch):
+    """transport 路径：请求体 model == judge_model（修 TINDALOS_JUDGE_MODEL 只改标签 bug）。"""
+    monkeypatch.setenv("TINDALOS_JUDGE_MODEL", "judge-small")
+    fake = FakeTransport(ok_chat(VALID_COT))
+    j = LLMJudge(settings=Settings(llm_enabled=True, model="deepseek-chat"), transport=fake)
+    res = j.evaluate(make_good_campaign(), None, _det())
+    assert fake.calls[0]["json"]["model"] == "judge-small"
+    assert res["judge"] == "llm"
 
 
 def test_judge_disabled_still_records_meta():

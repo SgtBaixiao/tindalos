@@ -22,6 +22,7 @@ class _FakeResp:
     def __init__(self, payload) -> None:
         self._payload = payload
         self.status_code = 200
+        self.text = ""
 
     def raise_for_status(self) -> None:
         pass
@@ -30,13 +31,23 @@ class _FakeResp:
         return self._payload
 
 
-class _FakeRequests:
+class _FakeTransport:
+    """统一客户端传输注入：恒回 {'ok': 1} 的 200 响应，零网络零 LLM。"""
+
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def post(self, url, json=None, headers=None, timeout=None):
-        self.calls.append({"url": url, "json": json, "headers": headers or {}, "timeout": timeout})
+    def __call__(self, method, url, *, json=None, headers=None, timeout=None):
+        self.calls.append({"method": method, "url": url, "json": json, "headers": headers or {}, "timeout": timeout})
         return _FakeResp({"choices": [{"message": {"content": '{"ok": 1}'}}]})
+
+
+@pytest.fixture(autouse=True)
+def _no_sleep(monkeypatch):
+    """重试退避已收敛到 llm._sleep_backoff：测试全零延迟（本文件 fake 恒 200，防御性）。"""
+    import tindalos.llm as _llm
+
+    monkeypatch.setattr(_llm, "_sleep_backoff", lambda attempt: None)
 
 
 def _settings(style_enabled: bool, style_path: str) -> Settings:
@@ -49,9 +60,8 @@ def _settings(style_enabled: bool, style_path: str) -> Settings:
 
 
 def _ctx(style_enabled: bool, style_path: str) -> str:
-    fake = _FakeRequests()
-    g = OllamaGenerator(_settings(style_enabled, style_path))
-    g._requests = fake
+    fake = _FakeTransport()
+    g = OllamaGenerator(_settings(style_enabled, style_path), transport=fake)
     g._chat("hi")
     return fake.calls[0]["json"]["messages"][0]["content"]
 
@@ -79,9 +89,8 @@ class TestStyleGuideInjection:
     def test_coexists_with_module_context(self, tmp_path: Path) -> None:
         guide = tmp_path / "style-guide.md"
         guide.write_text("风格规范正文。", encoding="utf-8")
-        fake = _FakeRequests()
-        g = OllamaGenerator(_settings(True, str(guide)))
-        g._requests = fake
+        fake = _FakeTransport()
+        g = OllamaGenerator(_settings(True, str(guide)), transport=fake)
         g.set_module_context("1649 年爱尔兰，克伦威尔登陆。", title="留地不留头")
         g._chat("hi")
         content = fake.calls[0]["json"]["messages"][0]["content"]

@@ -32,6 +32,14 @@ FIXTURE2 = """旧港镇的石匠坊里，一尊石像鬼像在雨夜微微转动
 
 
 @pytest.fixture(autouse=True)
+def no_sleep(monkeypatch):
+    """零退避睡眠：LLMClient 重试路径（网络/5xx/429/408）不真正 sleep，防测试挂慢。"""
+    import tindalos.llm as llm
+
+    monkeypatch.setattr(llm, "_sleep_backoff", lambda attempt: None)
+
+
+@pytest.fixture(autouse=True)
 def rag_env(tmp_path, monkeypatch):
     """每测一个独立 rag 目录 + 强制离线/本地模式。"""
     monkeypatch.setenv("TINDALOS_RAG_DIR", str(tmp_path / "rag"))
@@ -41,6 +49,8 @@ def rag_env(tmp_path, monkeypatch):
     monkeypatch.delenv("TINDALOS_DASHSCOPE_KEY", raising=False)
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("TINDALOS_EMBED_BASE", raising=False)
+    # config 单例按 env 一次性构造：重置后 get_settings() 才能读到本轮 env
+    monkeypatch.setattr("tindalos.config._settings", None)
     yield
     rag.reset()
 
@@ -184,6 +194,8 @@ def test_qa_llm_failure_degrades_to_local(monkeypatch):
     monkeypatch.setenv("TINDALOS_LLM_ENABLED", "1")
     monkeypatch.setenv("TINDALOS_API_BASE", "http://127.0.0.1:1/v1")
     monkeypatch.setenv("TINDALOS_LLM_TIMEOUT", "2")
+    # 重置 config 单例，使本轮 env 生效（否则 get_settings() 拿到旧配置）
+    monkeypatch.setattr("tindalos.config._settings", None)
     rag.ingest_module("m1", "德罗赫达之宴", FIXTURE)
     out = rag.qa("缪楚是什么人物？")
     assert out["mode"] == "local"

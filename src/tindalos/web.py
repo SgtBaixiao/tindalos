@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -63,6 +64,8 @@ class GenerateRequest(BaseModel):
     module_text: str
     llm: bool = False
     rules: str = "COC7"
+    # 模组图像视觉识别结果（spec §四.3）：kind/name/caption 透传给 default_generate 注入生成上下文。
+    module_images: list[dict] | None = None
 
 
 class RegenerateRequest(BaseModel):
@@ -146,6 +149,32 @@ def _image_url(image_path: str) -> str:
         return "/files/" + rel.as_posix()
     except ValueError:
         return ""
+
+
+class _ModuleImagesFiles(StaticFiles):
+    """/files 静态挂载的安全收窄：仅放行 modules/<module_id>/images/<图片>（扩展名白名单），
+    其余一律 404——防止 data/ 整目录泄露（store/*.sqlite、modules/<id>/text.txt 均不可下载）。
+    _image_url 输出形状（/files/modules/<id>/images/...）保持不变。
+    """
+
+    _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+    async def get_response(self, path: str, scope):  # noqa: ARG001 - 兼容父类签名
+        if not self._is_allowed(path):
+            raise HTTPException(status_code=404, detail="not found")
+        return await super().get_response(path, scope)
+
+    @classmethod
+    def _is_allowed(cls, path: str) -> bool:
+        # 目标形状：modules/<module_id>/images/<file>（4 段）。
+        # Starlette get_path 经 os.path.normpath（Windows 下产出反斜杠）→ 先归一为 '/'
+        parts = [p for p in path.replace("\\", "/").split("/") if p]
+        if len(parts) != 4:
+            return False
+        module_dir, _module_id, images_dir, fname = parts
+        if module_dir != "modules" or images_dir != "images":
+            return False
+        return fname.lower().endswith(cls._IMAGE_EXT)
 
 
 def _module_dir(module_id: str) -> Path:
@@ -290,7 +319,7 @@ def create_app() -> FastAPI:
 
             def worker() -> None:
                 try:
-                    campaign = default_generate(module_text, body.llm, emit)
+                    campaign = default_generate(module_text, body.llm, emit, module_images=body.module_images)
                     if campaign is not None:
                         q.put(("done", campaign))
                 except Exception as e:  # noqa: BLE001 - 生成失败转为 SSE 错误帧
@@ -448,7 +477,8 @@ def create_app() -> FastAPI:
                 pass
             raise HTTPException(status_code=422, detail=f"PDF 解析失败：{e}")
 
-        vision_results = vision.classify_images(info.images)
+        # 同步阻塞的视觉识别（含云端 LLM 调用）不能卡死事件循环：移到线程池执行。
+        vision_results = await asyncio.to_thread(vision.classify_images, info.images)
         (midir / "text.txt").write_text(info.full_text(), encoding="utf-8")
         meta = {
             "source_filename": safe_name,
@@ -755,7 +785,7 @@ def create_app() -> FastAPI:
 
     _files = _data_dir()
     _files.mkdir(parents=True, exist_ok=True)
-    app.mount("/files", StaticFiles(directory=str(_files)), name="files")
+    app.mount("/files", _ModuleImagesFiles(directory=str(_files)), name="files")
 
     dist = Path(os.environ.get("TINDALOS_FRONTEND_DIST", "frontend/dist"))
     if dist.exists() and (dist / "index.html").exists():

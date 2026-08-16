@@ -13,7 +13,7 @@
                      有 LLM key 且 TINDALOS_LLM_ENABLED==1 → 云端回答
                      否则 → 本地关键词句子拼接（诚实标注"无 LLM"）
 
-零新增依赖：标准库 + numpy + chromadb + requests（均已装）。
+零新增依赖：标准库 + numpy + chromadb（均已装）。
 """
 
 from __future__ import annotations
@@ -23,15 +23,14 @@ import json
 import math
 import os
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
 import numpy as np
 
-try:  # requests 为可选（离线无网络时缺省降级）
-    import requests
-except ImportError:  # pragma: no cover - 依赖探测已确认安装，此分支仅防御
-    requests = None  # type: ignore[assignment]
+from tindalos.config import get_settings
+from tindalos.llm import LLMClient
 
 try:  # chromadb 为可选；缺失时库导入不失败，调用入库/检索时报错
     import chromadb
@@ -274,19 +273,11 @@ _embedder_cache: dict[str, Any] = {"fn": None}
 _OFFLINE_DIM = 256
 
 
-def _embed_key() -> str:
-    """DashScope embedding key（环境变量约定，同 vision.py 的 VL key）。"""
-    return os.environ.get("TINDALOS_DASHSCOPE_KEY") or os.environ.get("DASHSCOPE_API_KEY", "")
-
-
-def _embed_model() -> str:
-    return os.environ.get("TINDALOS_EMBED_MODEL", "text-embedding-v4")
-
-
-def _embed_base() -> str:
-    return os.environ.get(
-        "TINDALOS_EMBED_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    )
+def _online_allowed() -> bool:
+    """熔断冷却判定：未失败（online_ok 非 False）或冷却窗口已过 → 允许再试在线。"""
+    if _EMBED_STATE.get("online_ok") is not False:
+        return True
+    return time.time() >= _EMBED_STATE.get("offline_until", 0)
 
 
 def _offline_embed(texts: Sequence[str]) -> np.ndarray:
@@ -317,23 +308,12 @@ def _online_embed(
     base: str,
     timeout: float = 30.0,
 ) -> np.ndarray:
-    """在线向量化：DashScope OpenAI 兼容 /embeddings，model=text-embedding-v4（1024 维）。"""
-    if requests is None:
-        raise RuntimeError("requests 未安装，无法在线向量化")
-    url = base.rstrip("/") + "/embeddings"
-    payload = {"model": model, "input": list(texts)}
-    resp = requests.post(
-        url,
-        json=payload,
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=timeout,
+    """在线向量化：经统一 LLMClient.embed（OpenAI 兼容 /embeddings，text-embedding-v4 1024 维）。"""
+    settings = get_settings()
+    vecs = LLMClient(settings).embed(
+        texts, timeout=timeout, base_url=base, model=model, api_key=key
     )
-    if resp.status_code != 200:
-        raise RuntimeError(f"embedding API {resp.status_code}: {resp.text[:200]}")
-    data = resp.json()
-    items = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
-    emb = [it["embedding"] for it in items]
-    arr = np.asarray(emb, dtype=np.float32)
+    arr = np.asarray(vecs, dtype=np.float32)
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     arr = arr / norms
@@ -343,16 +323,20 @@ def _online_embed(
 def make_embedder() -> Callable[[list[str]], np.ndarray]:
     """返回 embed(texts) 可调用对象：在线优先，失败/无 key 自动降级离线。
 
-    首次在线失败后本进程内不再重试在线（记入 _EMBED_STATE），避免反复网络超时。
+    在线失败记入 _EMBED_STATE 并进入 60s 冷却窗口（offline_until），冷却过后恢复
+    重试在线，避免反复网络超时（2026-08-16 熔断恢复：不再首次失败即永久 offline）。
     """
 
     def embed(texts: Sequence[str]) -> np.ndarray:
-        key = _embed_key()
-        if key and _EMBED_STATE.get("online_ok") is not False:
+        settings = get_settings()
+        key = settings.embed_key
+        if key and _online_allowed():
             try:
-                arr = _online_embed(
-                    texts, key, _embed_model(), _embed_base(), timeout=30.0
-                )
+                vecs = LLMClient(settings).embed(texts, timeout=30.0)
+                arr = np.asarray(vecs, dtype=np.float32)
+                norms = np.linalg.norm(arr, axis=1, keepdims=True)
+                norms[norms == 0] = 1.0
+                arr = arr / norms
                 _EMBED_STATE["online_ok"] = True
                 _EMBED_STATE["mode"] = "online"
                 return arr
@@ -360,6 +344,7 @@ def make_embedder() -> Callable[[list[str]], np.ndarray]:
                 _EMBED_STATE["online_ok"] = False
                 _EMBED_STATE["mode"] = "offline"
                 _EMBED_STATE["degraded_reason"] = str(e)[:120]
+                _EMBED_STATE["offline_until"] = time.time() + 60
         return _offline_embed(texts)
 
     return embed
@@ -373,14 +358,12 @@ def get_embedder() -> Callable[[list[str]], np.ndarray]:
 
 
 def _embed_mode() -> str:
-    """当前向量化模式：有 key 未失败即 online，否则 offline。"""
-    if not _embed_key():
+    """当前向量化模式：有 key 且未失败即 online，否则 offline。"""
+    if not get_settings().embed_key:
         return "offline"
-    if _EMBED_STATE.get("online_ok") is True:
-        return "online"
     if _EMBED_STATE.get("online_ok") is False:
         return "offline"
-    return "online"  # 有 key 尚未尝试
+    return "online"  # 有 key 尚未尝试或在线可用
 
 
 class _ChromaEF(EmbeddingFunction):  # type: ignore[misc, valid-type]
@@ -539,13 +522,6 @@ def ingest_module(
         )
         for c in children
     ]
-    child_emb = embed(child_docs)
-    col.add(
-        ids=child_ids,
-        documents=child_docs,
-        embeddings=child_emb.tolist(),
-        metadatas=child_metas,
-    )
 
     # -- 父块入库（供 QA 取上下文） -----------------------------------------
     parent_ids = [f"{module_id}:p{p['index']}" for p in parents]
@@ -562,7 +538,20 @@ def ingest_module(
         )
         for p in parents
     ]
-    parent_emb = embed(parent_docs)
+
+    # 子块 + 父块合并一次 embed（保证单次 ingest 内维度一致：此前分两次调用，
+    # 一次在线成功（1024 维）+ 一次失败降级（256 维）→ ChromaDB 入库崩溃/检索全空）
+    n = len(child_docs)
+    all_emb = embed(child_docs + parent_docs)
+    child_emb = all_emb[:n]
+    parent_emb = all_emb[n:]
+
+    col.add(
+        ids=child_ids,
+        documents=child_docs,
+        embeddings=child_emb.tolist(),
+        metadatas=child_metas,
+    )
     col.add(
         ids=parent_ids,
         documents=parent_docs,
@@ -797,14 +786,12 @@ def _build_context(sources: list[dict], limit_chars: int = 6000) -> str:
 
 
 def _llm_answer(question: str, context: str, rules: str | None, sources: list[dict]) -> str:
-    """在线 LLM 问答（OpenAI 兼容 chat/completions，DeepSeek 默认端点）。失败抛异常。"""
-    if requests is None:
-        raise RuntimeError("requests 未安装，无法走在线 LLM 问答")
-    base = os.environ.get("TINDALOS_API_BASE", "https://api.deepseek.com/v1")
-    model = os.environ.get("TINDALOS_MODEL", "deepseek-chat")
-    key = os.environ.get("TINDALOS_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-    timeout = float(os.environ.get("TINDALOS_LLM_TIMEOUT", "60"))
+    """在线 LLM 问答（统一 LLMClient.chat）。
 
+    端点/模型/key/超时自动取 Settings（本地 Ollama 与云端 OpenAI 兼容端点通用），
+    失败抛 LLMError → 上层 qa() try/except 兜底降级本地。
+    """
+    settings = get_settings()
     system = (
         "你是 TRPG 规则问答助手（Tindalos）。规则体系无关（COC/DND 皆可回答）；用中文回答。\n"
         "作答要求（按优先级）：\n"
@@ -818,25 +805,13 @@ def _llm_answer(question: str, context: str, rules: str | None, sources: list[di
     if rules:
         system += f"\n本次问答适用的规则体系：{rules}。"
 
-    body = {
-        "model": model,
-        "messages": [
+    return LLMClient(settings).chat(
+        [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"问题：{question}\n\n参考来源：\n{context}"},
+            {"role": "user", "content": "问题：" + question + "\n\n参考来源：\n" + context},
         ],
-        "temperature": 0.3,
-    }
-    url = base.rstrip("/") + "/chat/completions"
-    resp = requests.post(
-        url,
-        json=body,
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=timeout,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(f"LLM API {resp.status_code}: {resp.text[:200]}")
-    data = resp.json()
-    return data["choices"][0]["message"]["content"].strip()
+        temperature=0.3,
+    ).strip()
 
 
 def _fetch_parent_records(child_results: list[dict]) -> list[dict]:
@@ -941,8 +916,9 @@ def qa(
     parent_results = _fetch_parent_records(results)
     sources = _dedup_sources(_merge_sources(results, parent_results))
 
-    llm_key = os.environ.get("TINDALOS_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", "")
-    llm_enabled = os.environ.get("TINDALOS_LLM_ENABLED", "0") == "1"
+    settings = get_settings()
+    llm_key = settings.api_key
+    llm_enabled = settings.llm_enabled
 
     degraded_reason = ""
     if llm_key and llm_enabled and results:

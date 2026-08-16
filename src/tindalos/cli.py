@@ -17,6 +17,8 @@
               （NPC 印象 / 关键事件 / 世界状态摘要；读 settings.store_dir 落盘 store）
   ⑨ consolidate [--campaign <id>] [--db <path>] → 手动离线整合（指定或全部 campaign）
   ⑩ session <campaign> --summary [--play-status] [--db] → 游玩会话回叙（record_session）
+  ⑪ doctor [--timeout] → LLM 连通性自检：chat / 视觉 VL / 向量 embedding 三路最小真请求
+              （只读；退出码位掩码 bit0=chat 失败 bit1=vision 失败 bit2=embed 失败）
 
 契约：成功退出码 0；输入文件缺失 / JSON 解析失败 / 实体未知 → 非 0 退出码，错误打到 stderr。
 全程确定性（零网络零 LLM）：--llm/--judge 仅在 TINDALOS_LLM_ENABLED=1 时生效，否则回退。
@@ -281,7 +283,7 @@ def eval_command(
             prior = None
             if replay_of is not None:
                 prior = json.loads(replay_of.read_text(encoding="utf-8"))
-            judge_obj = LLMJudge()  # 未 --judge 时 enabled=False → runner 降级 llm_disabled（零 LLM）
+            judge_obj = LLMJudge(enabled=judge)  # 未 --judge → 强关：即使 TINDALOS_LLM_ENABLED=1 也零云端请求
             if judge and not judge_obj.enabled:
                 typer.echo("警告：--judge 请求但 TINDALOS_LLM_ENABLED != '1'，L3 降级跳过", err=True)
             tr = run_eval(campaign, judge=judge_obj, module_id=module_id, replay_of=prior)
@@ -556,6 +558,25 @@ def web_command(
     except OSError as e:
         typer.echo(f"错误：{e}", err=True)
         raise typer.Exit(code=1) from e
+
+
+# ---------------------------------------------------------------- ⑪ doctor
+
+
+@app.command(name="doctor")
+def doctor_command(
+    timeout: float = typer.Option(15.0, "--timeout", "-t", help="每路探测超时秒数（默认 15）"),
+) -> None:
+    """⑪ LLM 连通性自检：chat / 视觉 VL / 向量 embedding 三路最小真请求（只读）。
+
+    失败按 无 key / key 无效(4xx) / 端点不通(连接/超时) 分层中文提示；退出码位掩码：
+    bit0=chat 失败 bit1=vision 失败 bit2=embed 失败（0=全部通过）。不写任何数据。
+    """
+    from tindalos.doctor import run_doctor
+
+    code = run_doctor(get_settings(), timeout=timeout)
+    if code:
+        raise typer.Exit(code=code)
 
 
 __all__ = ["app", "render_notes"]

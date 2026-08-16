@@ -66,8 +66,17 @@ def _resolve_serve_generator(llm: bool) -> Any:
     return DeterministicGenerator()
 
 
-def default_generate(module_text: str, llm: bool, emit: Callable[[str, str], bool]) -> dict | None:
+def default_generate(
+    module_text: str,
+    llm: bool,
+    emit: Callable[[str, str], bool],
+    *,
+    module_images: list | None = None,
+) -> dict | None:
     """跑 LangGraph 管线：逐条 emit(stage, message)（返回 False 表示客户端已断开，须停止）。
+
+    module_images：可选的模组图像视觉识别结果列表（kind/name/caption），透传给生成器
+    注入"模组图像参考"上下文块（spec §四.3）；无模块图像时缺省为空列表，行为不变。
 
     成功返回 campaign dict（model_dump json）；客户端断开返回 None；异常抛出（由调用方发错误帧）。
     """
@@ -76,6 +85,8 @@ def default_generate(module_text: str, llm: bool, emit: Callable[[str, str], boo
     generator = _resolve_serve_generator(llm)
     if hasattr(generator, "set_module_context"):  # LLM 生成基于模组全文（loop 迭代改进）
         generator.set_module_context(module_text, title=module_text.strip().splitlines()[0][:40] if module_text.strip() else "")
+    if hasattr(generator, "set_module_images"):  # 多模态参考（vision 分类结果）注入生成上下文
+        generator.set_module_images(module_images or [])
     app = build_pipeline(generator=generator)
     config = {"configurable": {"thread_id": f"serve-{uuid.uuid4().hex[:8]}"}}
     final: dict | None = None

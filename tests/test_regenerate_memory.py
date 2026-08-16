@@ -381,8 +381,12 @@ def client(tmp_path, monkeypatch):
 
 
 def _fake_generate(events, campaign):
-    """确定性伪生成：逐条 emit(stage,message)，返回 campaign dict。"""
-    def gen(module_text: str, llm: bool, emit) -> dict:
+    """确定性伪生成：逐条 emit(stage,message)，返回 campaign dict。
+
+    签名与 serve.default_generate 对齐（#22 新增 keyword-only module_images），
+    否则 web 路由按新签名调用会 TypeError 被吞成 failed 帧。
+    """
+    def gen(module_text: str, llm: bool, emit, *, module_images=None) -> dict:
         for stage, message in events:
             emit(stage, message)
         return campaign

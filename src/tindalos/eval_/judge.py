@@ -8,19 +8,21 @@
 （settings.model 或 env TINDALOS_JUDGE_MODEL 覆盖），与生成同模型时标注
 self_preference_risk=true。
 
-零外部依赖：默认 client 经 urllib 调用 OpenAI 兼容 /chat/completions；
-LLMJudge(client=...) 可注入可调用对象（callable(messages)->str），便于测试与替换后端。
+统一客户端（2026-08-17 架构收敛）：默认 client 经 LLMClient 调用 OpenAI 兼容
+/chat/completions（temperature=0 + response_format=json_object，设计文档 §3.5 L3）；
+LLMJudge(client=...) 可注入可调用对象（callable(messages)->str），transport= 注入
+LLMClient 传输（测试 fake），便于测试与替换后端。
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
-import urllib.request
 from typing import Any, Callable, Optional
 
+from tindalos import llm
 from tindalos.config import Settings, get_settings
+from tindalos.llm import LLMClient
 from tindalos.eval_.rubric import DIMENSIONS, RUBRIC
 from tindalos.models import Campaign
 
@@ -58,60 +60,26 @@ def build_judge_prompt() -> str:
 def _extract_json_object(text: str) -> Optional[str]:
     """从可能含 CoT 前后文的文本中提取第一个完整的顶层 JSON 对象。
 
-    逐字符平衡括号扫描（跳过字符串内的 { }），比贪婪正则 \\{.*\\} 更稳——
-    CoT 推理文字里若出现 { } 不会误截。找不到完整对象返回 None。
+    复用 llm._iter_balanced_blocks 平衡括号扫描（跳过字符串内的 { }），比贪婪正则
+    \\{.*\\} 更稳——CoT 推理文字里若出现 { } 不会误截。找不到完整对象返回 None。
     """
-    start: Optional[int] = None
-    depth = 0
-    in_string = False
-    escaped = False
-    for i, ch in enumerate(text):
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch == "{":
-            if start is None:
-                start = i
-            depth += 1
-        elif ch == "}":
-            if depth == 0:
-                return None  # 括号不平衡
-            depth -= 1
-            if depth == 0 and start is not None:
-                return text[start : i + 1]
+    for start, end in llm._iter_balanced_blocks(text, "{", "}"):
+        return text[start : end + 1]
     return None
 
 
 def parse_judge_json(text: Any) -> Optional[dict]:
     """解析裁判输出；任一维键缺失/类型错/分数越界 → 返回 None（调用方降级 judge='none'）。
 
-    容忍 CoT 前后文：整体非 JSON 时用平衡括号扫描提取第一个完整 JSON 对象。
+    容忍 CoT 前后文：剥 fence + json.loads + 平衡括号扫描三步收敛为 llm._extract_json。
     evidence_refs 为可选键：缺省时省略（兼容旧输出）；存在但类型错 → 降级。
     """
     if not isinstance(text, str) or not text.strip():
         return None
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
-        cleaned = re.sub(r"\n?```$", "", cleaned)
-    obj: Any = None
     try:
-        obj = json.loads(cleaned)
-    except (json.JSONDecodeError, ValueError):
-        candidate = _extract_json_object(cleaned)
-        if candidate is None:
-            return None
-        try:
-            obj = json.loads(candidate)
-        except (json.JSONDecodeError, ValueError):
-            return None
+        obj = llm._extract_json(text)
+    except ValueError:
+        return None
     if not isinstance(obj, dict):
         return None
 
@@ -143,24 +111,23 @@ def parse_judge_json(text: Any) -> Optional[dict]:
     return dims
 
 
-def _default_client(settings: Settings) -> Callable[[list[dict]], str]:
-    """OpenAI 兼容 /chat/completions 客户端（urllib，零依赖）。"""
+def _default_client(
+    settings: Settings, *, transport: Optional[Callable] = None, model: Optional[str] = None
+) -> Callable[[list[dict]], str]:
+    """LLMClient 封装：temperature=0 + json_object（设计文档 §3.5 L3 明确 temp=0）。
+
+    model 缺省取 settings.model；judge 传 self.judge_model 让请求体模型与
+    TINDALOS_JUDGE_MODEL 一致（修 2026-08-17 审计：只改标签不改请求模型）。
+    """
 
     def call(messages: list[dict]) -> str:
-        url = settings.ollama_base_url.rstrip("/") + "/chat/completions"
-        body = json.dumps({
-            "model": settings.model,
-            "messages": messages,
-            "temperature": 0,  # 确定性格（设计文档 §3.5 L3 明确 temp=0）
-            "response_format": {"type": "json_object"},
-        }).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        if settings.api_key:  # 云端 API（DeepSeek/Kimi/GLM/Qwen 等）需 Bearer 头（2026-08-11 接入）
-            headers["Authorization"] = f"Bearer {settings.api_key}"
-        req = urllib.request.Request(url, data=body, headers=headers)
-        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 —— 用户配置的本地端点
-            data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"]
+        return LLMClient(settings, transport=transport).chat(
+            messages,
+            temperature=0,  # 确定性格（设计文档 §3.5 L3 明确 temp=0）
+            response_format={"type": "json_object"},
+            timeout=60,
+            model=model,
+        )
 
     return call
 
@@ -194,9 +161,14 @@ class LLMJudge:
         self,
         settings: Optional[Settings] = None,
         client: Optional[Callable[[list[dict]], str]] = None,
+        *,
+        transport: Optional[Callable] = None,
+        enabled: Optional[bool] = None,
     ) -> None:
         self.settings = settings if settings is not None else get_settings()
         self._client = client
+        self._transport = transport  # 传给 LLMClient（生产缺省 requests，测试注入 fake）
+        self._enabled = enabled  # 仅"关"方向生效的开关覆盖（详见 enabled property）
         # judge_model：env TINDALOS_JUDGE_MODEL 覆盖 settings.model（设计文档 §4.3 裁判用小模型）
         self.judge_model = os.environ.get("TINDALOS_JUDGE_MODEL") or self.settings.model
         # 与生成同模型 → self-preference 风险（§3.5 L3 注）
@@ -204,7 +176,11 @@ class LLMJudge:
 
     @property
     def enabled(self) -> bool:
-        return self.settings.llm_enabled
+        """enabled override 只在"关"方向生效：enabled=False 时无论 settings 如何都禁用；
+        enabled=True 时仍需 settings.llm_enabled 才真正启用（无法强开）。"""
+        if self._enabled is None:
+            return self.settings.llm_enabled
+        return self._enabled and self.settings.llm_enabled
 
     def evaluate(self, campaign: Any, world: Any, deterministic_result: dict) -> dict:
         meta = {
@@ -213,17 +189,21 @@ class LLMJudge:
         }
         if not self.enabled:
             return {"judge": "none", "reason": "llm_disabled", **meta}
-        client = self._client or _default_client(self.settings)
-        messages = [
-            {"role": "system", "content": build_judge_prompt()},
-            {
-                "role": "user",
-                "content": _build_user_payload(campaign, world, deterministic_result),
-            },
-        ]
+        # model=self.judge_model：请求体模型与 TINDALOS_JUDGE_MODEL 一致（修审计 bug）
+        client = self._client or _default_client(
+            self.settings, transport=self._transport, model=self.judge_model
+        )
         try:
+            # messages 构建也在 try 内：序列化异常（_build_user_payload）同样走降级
+            messages = [
+                {"role": "system", "content": build_judge_prompt()},
+                {
+                    "role": "user",
+                    "content": _build_user_payload(campaign, world, deterministic_result),
+                },
+            ]
             text = client(messages)
-        except Exception as e:  # noqa: BLE001 —— 网络/后端异常统一降级
+        except Exception as e:  # noqa: BLE001 —— 序列化/网络/后端异常统一降级
             return {"judge": "none", "reason": f"llm_error: {e}", **meta}
         dims = parse_judge_json(text)
         if dims is None:
