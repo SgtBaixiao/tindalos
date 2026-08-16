@@ -52,6 +52,11 @@ class Settings:
     llm_timeout: float = field(
         default_factory=lambda: float(os.environ.get("TINDALOS_LLM_TIMEOUT", "180"))
     )
+    # Eval 预检预算上限（USD）：LLM 层（L3/L4）调用前按 worst-case 估算，
+    # 超限降级跳过（设计文档 §4.3 预算门）。EVAL_MAX_USD 默认 $2
+    eval_max_usd: float = field(
+        default_factory=lambda: float(os.environ.get("EVAL_MAX_USD", "2.0"))
+    )
     # LLM 请求重试次数（网络抖动 / 5xx / 429 时重试；4xx 不重试）
     llm_max_retries: int = field(
         default_factory=lambda: int(os.environ.get("TINDALOS_LLM_MAX_RETRIES", "2"))

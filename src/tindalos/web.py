@@ -85,6 +85,17 @@ class QaRequest(BaseModel):
     rules: str | None = None
 
 
+class EvalRunRequest(BaseModel):
+    """POST /api/eval/run：对某历史剧本跑完整六层 eval（零 LLM 也可全绿）。
+
+    campaign_id 缺省时取最新一条历史剧本；module_id 传给 L4 限定检索语料；
+    max_usd 覆盖预算门上限（默认 Settings.eval_max_usd，环境变量 EVAL_MAX_USD）。
+    """
+    campaign_id: str | None = None
+    module_id: str | None = None
+    max_usd: float | None = None
+
+
 class ConfirmImageRequest(BaseModel):
     image_path: str
     kind: str
@@ -560,6 +571,50 @@ def create_app() -> FastAPI:
 
         history_mod.delete_campaign(campaign_id)
         return Response(status_code=204)
+
+    # ---------------------------------------------------------- eval trace
+
+    def _eval_db_path() -> Path:
+        # 与 eval_store.eval_db_path 默认一致（Settings.store_dir = data/store）
+        return _data_dir() / "store" / "eval.sqlite"
+
+    @app.get("/api/eval/runs")
+    async def api_eval_runs(limit: int = 20, campaign_id: str | None = None):
+        from tindalos import eval_store
+
+        return {"runs": eval_store.list_runs(limit=limit, campaign_id=campaign_id, db_path=_eval_db_path())}
+
+    @app.get("/api/eval/runs/{run_id}")
+    async def api_eval_run_detail(run_id: str):
+        from tindalos import eval_store
+
+        run = eval_store.get_run(run_id, db_path=_eval_db_path())
+        if run is None:
+            raise HTTPException(status_code=404, detail="eval run not found")
+        return {"run": run, "annotations": eval_store.list_annotations(run_id, db_path=_eval_db_path())}
+
+    @app.post("/api/eval/run")
+    async def api_eval_run(body: EvalRunRequest):
+        from tindalos import eval_store, history as history_mod
+        from tindalos.eval_.runner import run_eval
+
+        campaign_id = body.campaign_id
+        if not campaign_id:
+            recent = history_mod.list_campaigns()
+            if not recent:
+                raise HTTPException(status_code=404, detail="无历史剧本，请先生成一个再评测")
+            campaign_id = recent[0]["id"]
+        rec = history_mod.get_campaign(campaign_id)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="campaign not found")
+        # history 快照是 dict——runner 内 _ensure_campaign_model 会归一化供属性访问
+        trace = run_eval(
+            rec["snapshot"],
+            module_id=body.module_id,
+            max_usd=body.max_usd,
+            db_path=_eval_db_path(),
+        )
+        return {"trace": trace}
 
     # ---------------------------------------------------------- 静态托管
 

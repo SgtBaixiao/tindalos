@@ -32,6 +32,7 @@ from tindalos.config import get_settings
 from tindalos.eval_.deterministic import run_deterministic
 from tindalos.eval_.judge import LLMJudge
 from tindalos.eval_.report import eval_report
+from tindalos.eval_.runner import run_eval
 from tindalos.generator import DeterministicGenerator, Generator, OllamaGenerator
 from tindalos.kg import build_from_campaign
 from tindalos.models import Campaign, construct_loose_campaign as _construct_loose
@@ -266,10 +267,27 @@ def eval_command(
     campaign_file: Path = typer.Argument(..., help="campaign JSON 路径"),
     judge: bool = typer.Option(False, "--judge", help="启用 LLM 裁判（需 TINDALOS_LLM_ENABLED=1）"),
     out: Path = typer.Option(None, "--out", "-o", help="评测报告 JSON 输出路径（缺省打印到 stdout）"),
+    trace: bool = typer.Option(False, "--trace", help="跑完整六层 eval 并持久化不可变 trace（eval.sqlite）"),
+    module_id: str = typer.Option(None, "--module-id", help="L4 faithfulness 限定检索的模组 id"),
+    replay_of: Path = typer.Option(None, "--replay-of", help="先前 trace JSON 路径（L6 回归对比）"),
 ) -> None:
-    """③ 评测：4 维分数表 + 归因 + 建议。JSON 到 stdout（无 --out）或 --out 文件。"""
+    """③ 评测：4 维分数表 + 归因 + 建议；--trace 跑六层编排并落盘不可变 trace。"""
     try:
         campaign = _load_campaign_model(campaign_file)
+        if trace:
+            prior = None
+            if replay_of is not None:
+                prior = json.loads(replay_of.read_text(encoding="utf-8"))
+            judge_obj = LLMJudge()  # 未 --judge 时 enabled=False → runner 降级 llm_disabled（零 LLM）
+            if judge and not judge_obj.enabled:
+                typer.echo("警告：--judge 请求但 TINDALOS_LLM_ENABLED != '1'，L3 降级跳过", err=True)
+            tr = run_eval(campaign, judge=judge_obj, module_id=module_id, replay_of=prior)
+            if out is not None:
+                _write_json(tr, out)
+                typer.echo(f"评测 trace 已写入：{out}（run_id={tr['run_id']}）")
+            else:
+                typer.echo(json.dumps(tr, ensure_ascii=False, indent=2))
+            return
         world = build_from_campaign(campaign)
         det = run_deterministic(campaign, world)
         judge_obj = LLMJudge() if judge else None
