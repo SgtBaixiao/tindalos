@@ -65,6 +65,17 @@ CREATE TABLE IF NOT EXISTS memory_entries (
 CREATE INDEX IF NOT EXISTS idx_mem_campaign ON memory_entries(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_mem_type ON memory_entries(campaign_id, memory_type);
 CREATE INDEX IF NOT EXISTS idx_mem_status ON memory_entries(campaign_id, status);
+
+CREATE TABLE IF NOT EXISTS play_sessions (
+  id             TEXT PRIMARY KEY,        -- 'sess:<campaign_id>:<index>'
+  campaign_id    TEXT NOT NULL,
+  session_index  INTEGER NOT NULL,
+  summary        TEXT NOT NULL,
+  play_status    TEXT,                    -- 最近一次游玩状态（结局/进行中/...）
+  conflicts      TEXT,                    -- JSON：分歧/规则裁定记录
+  created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ps_campaign ON play_sessions(campaign_id);
 """
 
 
@@ -409,6 +420,787 @@ def assemble_memory_context(
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- P1 整合维护层
+
+# longterm 三键（设计文档 §3.4 / P1：consolidate 产出长期记忆的固定 subject_key）
+_LLM_LONGTERM_KEYS: tuple[str, ...] = ("synopsis", "plotline", "npc_arcs")
+
+
+def _active_rows(conn: sqlite3.Connection, campaign_id: str, memory_type: str) -> list[dict[str, Any]]:
+    """某 campaign 该类型的 active 条目（created_at + rowid 稳定排序，供「最旧一批」判定）。
+
+    rowid 作同秒时间戳的稳定 tiebreaker，保证确定性：同样输入两次调用取同一批。
+    """
+    rows = conn.execute(
+        "SELECT * FROM memory_entries WHERE campaign_id = ? AND memory_type = ? AND status = 'active' "
+        "ORDER BY created_at ASC, rowid ASC",
+        (campaign_id, memory_type),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _mark_superseded(conn: sqlite3.Connection, entry_id: str, supersedes_id: str | None) -> None:
+    """把某条目置 superseded（supersedes_id 链；绝不物理删除）。"""
+    conn.execute(
+        "UPDATE memory_entries SET status = 'superseded', supersedes_id = ?, updated_at = ? WHERE id = ?",
+        (supersedes_id, _now(), entry_id),
+    )
+
+
+def _mark_oldest_episodic_consolidated(
+    conn: sqlite3.Connection, campaign_id: str, min_episodic: int
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """情景上限：active episodic 超出 min_episodic 时，把最旧一批置 consolidated。
+
+    返回 (被整合的条目 id 列表, 对应行)。幂等：未超限 → 空，不写任何行。
+    """
+    active = _active_rows(conn, campaign_id, "episodic")
+    overflow = len(active) - min_episodic
+    if overflow <= 0:
+        return [], []
+    batch = active[:overflow]
+    ids = [r["id"] for r in batch]
+    now = _now()
+    for eid in ids:
+        conn.execute(
+            "UPDATE memory_entries SET status = 'consolidated', updated_at = ? WHERE id = ? AND status = 'active'",
+            (now, eid),
+        )
+    return ids, batch
+
+
+def _backfill_consolidated_into(
+    conn: sqlite3.Connection, consolidated_ids: Sequence[str], target_id: str | None
+) -> None:
+    """整合回填：consolidated 条目指向它们被整合进的长条目 id。"""
+    if not consolidated_ids:
+        return
+    now = _now()
+    for eid in consolidated_ids:
+        conn.execute(
+            "UPDATE memory_entries SET consolidated_into = ?, updated_at = ? WHERE id = ?",
+            (target_id, now, eid),
+        )
+
+
+def _write_longterm(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    subject_key: str,
+    content: str,
+    ref_ids: Sequence[str] | None = None,
+    source_episode: str | None = None,
+    importance: float = 0.8,
+) -> tuple[str, bool]:
+    """写一条 longterm（subject_key ∈ synopsis/plotline/npc_arcs）。
+
+    同键旧 active 条目置 superseded（supersedes_id 指向新版）；同键同内容 → 幂等跳过。
+    返回 (条目 id, 是否实际写入)。
+    """
+    content = _clip(content)
+    c_hash = _content_hash(content)
+    now = _now()
+    existing = conn.execute(
+        "SELECT id, content_hash FROM memory_entries "
+        "WHERE campaign_id = ? AND memory_type = 'longterm' AND subject_key = ? AND status = 'active' "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (campaign_id, subject_key),
+    ).fetchone()
+    if existing is not None and existing["content_hash"] == c_hash:
+        return existing["id"], False
+    new_id = f"ltm:{campaign_id}:{subject_key}:{c_hash[:12]}"
+    if existing is not None:
+        _mark_superseded(conn, existing["id"], new_id)
+    row = {
+        "id": new_id,
+        "campaign_id": campaign_id,
+        "memory_type": "longterm",
+        "content": content,
+        "importance": importance,
+        "source_episode": source_episode,
+        "ref_ids": json.dumps(list(ref_ids or []), ensure_ascii=False),
+        "subject_key": subject_key,
+        "status": _ACTIVE,
+        "valid_from": None,
+        "valid_to": None,
+        "supersedes_id": existing["id"] if existing is not None else None,
+        "consolidated_into": None,
+        "content_hash": c_hash,
+        "embedding": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _upsert(conn, row)
+    return new_id, True
+
+
+def _insert_entry(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    memory_type: str,
+    entry_id: str,
+    content: str,
+    subject_key: str | None = None,
+    ref_ids: Sequence[str] | None = None,
+    source_episode: str | None = None,
+    importance: float = 0.6,
+) -> None:
+    """追加式写入一条非 longterm 条目（LLM 路径 ADD/UPDATE 的落地）。"""
+    content = _clip(content)
+    now = _now()
+    row = {
+        "id": entry_id,
+        "campaign_id": campaign_id,
+        "memory_type": memory_type,
+        "content": content,
+        "importance": importance,
+        "source_episode": source_episode,
+        "ref_ids": json.dumps(list(ref_ids or []), ensure_ascii=False),
+        "subject_key": subject_key,
+        "status": _ACTIVE,
+        "valid_from": None,
+        "valid_to": None,
+        "supersedes_id": None,
+        "consolidated_into": None,
+        "content_hash": _content_hash(content),
+        "embedding": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _upsert(conn, row)
+
+
+def _active_by_subject(
+    conn: sqlite3.Connection, campaign_id: str, memory_type: str, subject_key: str
+) -> dict | None:
+    """定位 active 条目（kind + subject_key）；无 → None。"""
+    row = conn.execute(
+        "SELECT id FROM memory_entries WHERE campaign_id = ? AND memory_type = ? AND subject_key = ? "
+        "AND status = 'active' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (campaign_id, memory_type, subject_key),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------- LLM 两段式
+
+
+def _build_prompt(campaign_id: str, episodic: Sequence[dict], semantic: Sequence[dict]) -> str:
+    """第一遍 prompt：把 active episodic + semantic 摘要喂给 LLM 提议操作。"""
+    lines = [
+        "你是记忆整合助手。请把给定战役（campaign）的情景记忆与语义事实整合为长期记忆。",
+        "只返回 JSON 操作列表，不要解释。每项形如：",
+        '{"op": "ADD|UPDATE|DELETE", "kind": "episodic|semantic|longterm", "subject_key": "...", "content": "...", "ref_ids": [...]}',
+        "规则：",
+        "- ADD：新增一条记忆；UPDATE：按 subject_key 定位旧条目并写新内容；DELETE：把 subject_key 条目标记为删除。",
+        "- longterm 的 subject_key 只能是 synopsis / plotline / npc_arcs 之一。",
+        "- content 单条不超过 200 字。",
+        "",
+        f"campaign_id: {campaign_id}",
+        "",
+        "## 情景记忆（episodic）",
+    ]
+    for e in episodic:
+        lines.append(f"- [{e.get('source_episode') or e.get('id')}] {e.get('content', '')}")
+    lines += ["", "## 语义事实（semantic）"]
+    for s in semantic:
+        lines.append(f"- ({s.get('subject_key') or s.get('id')}) {s.get('content', '')}")
+    return "\n".join(lines)
+
+
+def _extract_json_list(text: str) -> list | None:
+    """容错 JSON 数组提取：裸 JSON、```json ``` 包裹、或前后带说明文字。失败 → None。"""
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+    except json.JSONDecodeError:
+        pass
+    import re
+
+    m = re.search(r"\[[\s\S]*\]", text)
+    if m is not None:
+        try:
+            data = json.loads(m.group(0))
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _parse_ops(text: str) -> list[dict[str, Any]]:
+    """LLM 返回的 JSON 文本 → 规范化操作列表；任何结构不合法 → []（确定性降级，不抛异常）。"""
+    data = _extract_json_list(text)
+    if data is None:
+        return []
+    ops: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        op = str(item.get("op", "")).strip().upper()
+        kind = str(item.get("kind", "")).strip().lower()
+        if op not in ("ADD", "UPDATE", "DELETE") or kind not in ("episodic", "semantic", "longterm"):
+            continue
+        content = item.get("content")
+        subject_key = item.get("subject_key")
+        ref_ids = item.get("ref_ids")
+        if content is not None and not isinstance(content, str):
+            continue
+        if subject_key is not None and not isinstance(subject_key, str):
+            continue
+        if ref_ids is not None and not isinstance(ref_ids, list):
+            continue
+        content = content.strip() if content is not None else None
+        if subject_key is not None:
+            subject_key = subject_key.strip()
+        if op in ("ADD", "UPDATE") and not content:
+            continue
+        if op in ("UPDATE", "DELETE") and not subject_key:
+            continue
+        if kind == "longterm" and subject_key not in _LLM_LONGTERM_KEYS:
+            continue
+        ops.append(
+            {
+                "op": op,
+                "kind": kind,
+                "subject_key": subject_key,
+                "content": content,
+                "ref_ids": [r for r in ref_ids if isinstance(r, str)] if ref_ids else None,
+            }
+        )
+    return ops
+
+
+def _apply_ops(
+    conn: sqlite3.Connection, campaign_id: str, ops: list[dict[str, Any]]
+) -> tuple[int, list[str]]:
+    """第二遍执行：ADD 新增、UPDATE 旧条目置 superseded 再写新版、DELETE 置 superseded。
+
+    绝不物理删除。返回 (成功应用数, 操作写过的 longterm subject_key 列表)。
+    """
+    applied = 0
+    longterm_keys: list[str] = []
+    for op in ops:
+        kind = op["kind"]
+        subject_key = op.get("subject_key")
+        content = op.get("content")
+        ref_ids = op.get("ref_ids")
+        if kind == "longterm":
+            _write_longterm(conn, campaign_id, subject_key, content, ref_ids=ref_ids)
+            longterm_keys.append(subject_key)
+            applied += 1
+            continue
+        if op["op"] == "ADD":
+            c_hash = _content_hash(content)[:12]
+            if kind == "semantic":
+                suffix = subject_key or "add"
+                new_id = f"sem:{campaign_id}:{suffix}:{c_hash}"
+            else:
+                new_id = f"evm:{campaign_id}:add:{c_hash}"
+            _insert_entry(conn, campaign_id, kind, new_id, content, subject_key=subject_key, ref_ids=ref_ids)
+            applied += 1
+        elif op["op"] == "UPDATE":
+            target = _active_by_subject(conn, campaign_id, kind, subject_key)
+            if target is None:
+                continue
+            c_hash = _content_hash(content)[:12] if content else "update"
+            if kind == "semantic":
+                new_id = f"sem:{campaign_id}:{subject_key}:{c_hash}"
+            else:
+                new_id = f"evm:{campaign_id}:{subject_key}:{c_hash}"
+            _insert_entry(conn, campaign_id, kind, new_id, content, subject_key=subject_key, ref_ids=ref_ids)
+            _mark_superseded(conn, target["id"], new_id)
+            applied += 1
+        else:  # DELETE
+            target = _active_by_subject(conn, campaign_id, kind, subject_key)
+            if target is None:
+                continue
+            _mark_superseded(conn, target["id"], None)
+            applied += 1
+    return applied, longterm_keys
+
+
+def _safe_parse_ops(conn: sqlite3.Connection, campaign_id: str, llm: Any) -> list[dict[str, Any]]:
+    """第一遍：把摘要喂给 llm，解析操作列表；LLM 抛异常 / 返回非法结构 → []。"""
+    try:
+        episodic = _active_rows(conn, campaign_id, "episodic")
+        semantic = _active_rows(conn, campaign_id, "semantic")
+        prompt = _build_prompt(campaign_id, episodic, semantic)
+        text = llm(prompt)
+        return _parse_ops(text)
+    except Exception:  # noqa: BLE001 - LLM 抛异常 → 确定性降级
+        return []
+
+
+def _event_title(row: dict) -> str:
+    """情景条目 → 事件标题：content 形如 '[Act·Scene] title：desc'。"""
+    content = row.get("content") or ""
+    if "]" in content:
+        content = content.split("]", 1)[-1]
+    return content.split("：", 1)[0].strip()
+
+
+def _npc_name(row: dict) -> str:
+    """NPC 语义条目 → 名字：content 形如 '老吴（富商）：…'。"""
+    content = row.get("content") or ""
+    if "（" in content:
+        return content.split("（", 1)[0].strip()
+    return content.split("：", 1)[0].strip()
+
+
+def _deterministic_longterm(campaign_id: str, key: str, rows: Sequence[dict]) -> str:
+    """确定性 longterm 内容（零 LLM 兜底）：从源条目拼一段 ≤200 字文本。"""
+    if key == "synopsis":
+        titles = [_event_title(r) for r in rows]
+        uniq = list(dict.fromkeys(t for t in titles if t))
+        head = "、".join(uniq)[:120]
+        return _clip(f"剧情概要：整合了 {len(rows)} 条情景记忆，事件序列：{head or '（空）'}。")
+    if key == "plotline":
+        acts = sorted({str(r.get("source_episode") or "").split("/", 1)[0] for r in rows if r.get("source_episode")})
+        return _clip(f"主线脉络：覆盖 {len(acts)} 个幕（{'、'.join(acts) or '—'}），共 {len(rows)} 条情景记忆。")
+    if key == "npc_arcs":
+        names = sorted({_npc_name(r) for r in rows if str(r.get("subject_key") or "").startswith("npc:")})
+        return _clip(f"NPC 弧光：{'、'.join(names) or '（暂无可追踪 NPC）'}。")
+    return _clip(f"{key}：已整合 {len(rows)} 条记忆。")
+
+
+def _ensure_longterm_keys(
+    conn: sqlite3.Connection, campaign_id: str, source_rows: Sequence[dict]
+) -> list[str]:
+    """LLM 路径兜底：保证 longterm 三键都有 active 条目，缺则确定性生成。
+
+    返回本次补齐的键列表。
+    """
+    written: list[str] = []
+    for key in _LLM_LONGTERM_KEYS:
+        exists = conn.execute(
+            "SELECT id FROM memory_entries WHERE campaign_id = ? AND memory_type = 'longterm' "
+            "AND subject_key = ? AND status = 'active'",
+            (campaign_id, key),
+        ).fetchone()
+        if exists is not None:
+            continue
+        content = _deterministic_longterm(campaign_id, key, source_rows)
+        _write_longterm(conn, campaign_id, key, content)
+        written.append(key)
+    return written
+
+
+def _consolidate_with_ops(
+    conn: sqlite3.Connection, campaign_id: str, ops: list[dict[str, Any]], min_episodic: int
+) -> dict:
+    """LLM 两段式第二遍：执行操作 → 保证 longterm 三键 → episodic 上限置 consolidated。"""
+    episodic_before = _active_rows(conn, campaign_id, "episodic")
+    semantic_before = _active_rows(conn, campaign_id, "semantic")
+    ops_applied, ops_longterm = _apply_ops(conn, campaign_id, ops)
+    written = list(ops_longterm)
+    for k in _ensure_longterm_keys(conn, campaign_id, episodic_before + semantic_before):
+        if k not in written:
+            written.append(k)
+    consolidated_ids, _ = _mark_oldest_episodic_consolidated(conn, campaign_id, min_episodic)
+    if consolidated_ids and "synopsis" not in written:
+        rows = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM memory_entries WHERE id IN ({})".format(",".join("?" * len(consolidated_ids))),
+                consolidated_ids,
+            ).fetchall()
+        ]
+        content = _deterministic_longterm(campaign_id, "synopsis", rows)
+        new_id, _ = _write_longterm(conn, campaign_id, "synopsis", content, ref_ids=consolidated_ids)
+        _backfill_consolidated_into(conn, consolidated_ids, new_id)
+        written.append("synopsis")
+    elif consolidated_ids:
+        # 已有 synopsis（LLM 或兜底写入）→ consolidated 指向它
+        syn = conn.execute(
+            "SELECT id FROM memory_entries WHERE campaign_id = ? AND memory_type = 'longterm' "
+            "AND subject_key = 'synopsis' AND status = 'active' LIMIT 1",
+            (campaign_id,),
+        ).fetchone()
+        _backfill_consolidated_into(conn, consolidated_ids, syn["id"] if syn else None)
+    return {
+        "campaign_id": campaign_id,
+        "llm": True,
+        "degraded": False,
+        "ops_applied": ops_applied,
+        "episodic_consolidated": len(consolidated_ids),
+        "longterm_written": sorted(set(written)),
+    }
+
+
+def _consolidate_deterministic(
+    conn: sqlite3.Connection, campaign_id: str, min_episodic: int, degraded: bool = False
+) -> dict:
+    """确定性路径：episodic 超限置 consolidated + 确定性拼 synopsis。幂等。"""
+    consolidated_ids, consolidated_rows = _mark_oldest_episodic_consolidated(conn, campaign_id, min_episodic)
+    written: list[str] = []
+    if consolidated_ids:
+        content = _deterministic_longterm(campaign_id, "synopsis", consolidated_rows)
+        new_id, _ = _write_longterm(conn, campaign_id, "synopsis", content, ref_ids=consolidated_ids)
+        _backfill_consolidated_into(conn, consolidated_ids, new_id)
+        written = ["synopsis"]
+    return {
+        "campaign_id": campaign_id,
+        "llm": False,
+        "degraded": degraded,
+        "ops_applied": 0,
+        "episodic_consolidated": len(consolidated_ids),
+        "longterm_written": written,
+    }
+
+
+def consolidate(
+    campaign_id: str,
+    db_path: Path | None = None,
+    llm: Any | None = None,
+    min_episodic: int = 20,
+) -> dict:
+    """记忆整合维护层（设计文档 §3.4 / P1 ticket 01）。
+
+    - LLM 两段式（llm 为最小可调用 `llm(prompt: str) -> str`，返回 JSON 文本）：
+      第一遍把 active episodic+semantic 摘要喂给 llm 提议 ADD/UPDATE/DELETE；
+      第二遍执行，并保证 longterm 三键（synopsis/plotline/npc_arcs）就位；
+      被整合的 episodic 置 consolidated（不物理删除，consolidated_into 连回 synopsis）。
+    - 确定性降级（llm=None，或 LLM 返回结构非法/抛异常）：episodic 超 min_episodic
+      时把最旧一批置 consolidated + 确定性拼 synopsis。幂等：同输入两次结果一致
+      （content_hash / status 判重，二次运行无新增写入）。
+    """
+    conn = _connect(db_path)
+    try:
+        if llm is not None:
+            ops = _safe_parse_ops(conn, campaign_id, llm)
+            if ops:
+                return _consolidate_with_ops(conn, campaign_id, ops, min_episodic)
+            return _consolidate_deterministic(conn, campaign_id, min_episodic, degraded=True)
+        return _consolidate_deterministic(conn, campaign_id, min_episodic)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- 游玩会话（play_sessions）
+
+
+def record_session(
+    campaign_id: str,
+    session_summary: str,
+    db_path: Path | None = None,
+    llm: Any | None = None,
+    play_status: str | None = None,
+    conflicts: Any | None = None,
+) -> dict:
+    """游玩会话记录（设计文档 §3.3 / P1 ticket 01）。
+
+    KP 回叙 → 新增 play_sessions 行（session_index = 现有计数 + 1）→ 触发轻量
+    consolidate。确定性路径零 LLM（传 llm 时走 LLM 两段式）。
+    """
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(session_index), 0) AS n FROM play_sessions WHERE campaign_id = ?",
+            (campaign_id,),
+        ).fetchone()
+        session_index = int(row["n"]) + 1
+        session_id = f"sess:{campaign_id}:{session_index}"
+        now = _now()
+        conn.execute(
+            "INSERT INTO play_sessions (id, campaign_id, session_index, summary, play_status, conflicts, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                campaign_id,
+                session_index,
+                session_summary,
+                play_status,
+                json.dumps(conflicts, ensure_ascii=False) if conflicts is not None else None,
+                now,
+            ),
+        )
+    finally:
+        conn.close()
+    result = consolidate(campaign_id, db_path, llm=llm)
+    return {
+        "session_id": session_id,
+        "session_index": session_index,
+        "play_status": play_status,
+        "consolidate": result,
+    }
+
+
+def current_play_status(campaign_id: str, db_path: Path | None = None) -> str | None:
+    """最近一次游玩会话的 play_status（无会话 → None）。零 LLM。"""
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT play_status FROM play_sessions WHERE campaign_id = ? "
+            "ORDER BY session_index DESC, created_at DESC LIMIT 1",
+            (campaign_id,),
+        ).fetchone()
+        return row["play_status"] if row is not None else None
+    finally:
+        conn.close()
+
+
+def list_play_sessions(campaign_id: str, db_path: Path | None = None) -> list[dict]:
+    """该 campaign 的全部游玩会话（按 session_index 升序）。零 LLM。"""
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM play_sessions WHERE campaign_id = ? ORDER BY session_index ASC",
+            (campaign_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def supersede_entries(
+    campaign_id: str,
+    db_path: Path | None = None,
+    ids: Sequence[str] | None = None,
+    subject_keys: Sequence[str] | None = None,
+) -> int:
+    """把匹配的 active 条目置 superseded（更新 updated_at；绝不物理删除）。
+
+    - ids：精确匹配条目 id；
+    - subject_keys：匹配该 campaign 下 semantic/longterm 的 subject_key（episodic 无
+      subject_key，不参与）；
+    - ids 与 subject_keys 至少给一个，否则 ValueError；
+    - 只影响 active 条目；返回受影响条数。确定性、幂等、零 LLM。
+    """
+    if not ids and not subject_keys:
+        raise ValueError("ids 与 subject_keys 至少给一个")
+    conn = _connect(db_path)
+    try:
+        affected = 0
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            cur = conn.execute(
+                f"UPDATE memory_entries SET status = ?, updated_at = ? "
+                f"WHERE campaign_id = ? AND id IN ({placeholders}) AND status = ?",
+                [_SUPERSEDED, _now(), campaign_id, *ids, _ACTIVE],
+            )
+            affected += int(cur.rowcount or 0)
+        if subject_keys:
+            placeholders = ",".join("?" * len(subject_keys))
+            cur = conn.execute(
+                f"UPDATE memory_entries SET status = ?, updated_at = ? "
+                f"WHERE campaign_id = ? AND memory_type IN ('semantic', 'longterm') "
+                f"AND subject_key IN ({placeholders}) AND status = ?",
+                [_SUPERSEDED, _now(), campaign_id, *subject_keys, _ACTIVE],
+            )
+            affected += int(cur.rowcount or 0)
+        return affected
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- P2 起步：post-session briefing + 向量检索
+
+
+def briefing(campaign_id: str, db_path: Path | None = None) -> str:
+    """生成「上次停在哪」回叙文本（设计文档 §3.5 P2 / ticket 05）。
+
+    组成：最近游玩会话摘要 + 当前 play_status + longterm synopsis/plotline 概要。
+    无任何会话与长期记忆 → 中文占位文案。确定性、零 LLM。
+    """
+    sessions = list_play_sessions(campaign_id, db_path)
+    longterm = list_entries(campaign_id, "longterm", db_path, status=_ACTIVE)
+    by_key = {e["subject_key"]: e["content"] for e in longterm}
+    synopsis = by_key.get("synopsis")
+    plotline = by_key.get("plotline")
+    if not sessions and not longterm:
+        return "该战役暂无游玩记录与长期记忆——还没有「上次停在哪」可回叙。"
+    lines = ["【上次停在哪】", ""]
+    if sessions:
+        last = sessions[-1]
+        lines.append(f"最近游玩（第 {last['session_index']} 场）：{last['summary']}")
+        status = last.get("play_status") or current_play_status(campaign_id, db_path)
+        if status:
+            lines.append(f"当前状态：{status}")
+    else:
+        lines.append("（尚无已记录的游玩会话）")
+    lines.append("")
+    if synopsis:
+        lines.append(f"剧情概要：{synopsis}")
+    if plotline:
+        lines.append(f"主线脉络：{plotline}")
+    return "\n".join(lines).rstrip()
+
+
+def _pack_vector(vec: Any) -> bytes:
+    """向量 → BLOB（小端 float32 数组）。支持 list/tuple/np.ndarray。"""
+    import struct
+
+    vals = [float(v) for v in vec]
+    return struct.pack(f"<{len(vals)}f", *vals)
+
+
+def _unpack_vector(blob: bytes) -> list[float]:
+    """BLOB → list[float]（小端 float32 数组，宽按字节数推断）。"""
+    import struct
+
+    return list(struct.unpack(f"<{len(blob) // 4}f", blob))
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    """余弦相似度（纯 Python 嵌套列表，零新依赖）。零向量 → 0.0。"""
+    import math
+
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _query_vector(query: str, embedder: Any | None) -> list[float]:
+    """query → list[float]。embedder 按 (text: str) -> list[float] 契约；
+    embedder=None 复用 rag.get_embedder（批契约取第一行）。不可用 → []（走 BM25 降级）。"""
+    if embedder is None:
+        try:
+            from tindalos import rag
+
+            arr = rag.get_embedder()([query])
+            if arr is not None and len(arr) > 0:
+                row = arr[0]
+                if hasattr(row, "tolist"):
+                    row = row.tolist()
+                if isinstance(row, (list, tuple)):
+                    return [float(v) for v in row]
+        except Exception:  # noqa: BLE001 - 查询向量不可用 → 降级 BM25
+            return []
+        return []
+    out = embedder(query)
+    if out is None:
+        return []
+    if hasattr(out, "tolist"):
+        out = out.tolist()
+    if isinstance(out, (list, tuple)) and out and (
+        isinstance(out[0], (list, tuple)) or hasattr(out[0], "tolist")
+    ):
+        first = out[0]
+        if hasattr(first, "tolist"):
+            first = first.tolist()
+        out = first
+    if not isinstance(out, (list, tuple)):
+        return []
+    try:
+        return [float(v) for v in out]
+    except (TypeError, ValueError):
+        return []
+
+
+def _result_dict(row: dict, score: float) -> dict:
+    """检索结果条目字典：id/memory_type/content/score + 溯源字段。"""
+    return {
+        "id": row["id"],
+        "memory_type": row["memory_type"],
+        "content": row["content"],
+        "score": round(float(score), 6),
+        "importance": row.get("importance"),
+        "subject_key": row.get("subject_key"),
+        "source_episode": row.get("source_episode"),
+    }
+
+
+def _bm25_retrieve(rows: Sequence[dict], query: str, k: int) -> list[dict]:
+    """BM25 确定性降级：对该 campaign 的 active 条目做经典 BM25 评分取 top-k。"""
+    idx = BM25Index().fit(
+        [r["content"] for r in rows],
+        doc_ids=[r["id"] for r in rows],
+    )
+    hits = idx.search(query, k)
+    by_id = {r["id"]: r for r in rows}
+    out: list[dict] = []
+    for h in hits:
+        row = by_id.get(h["doc_id"])
+        if row is None or not h.get("score") or h["score"] <= 0:
+            continue
+        out.append(_result_dict(row, float(h["score"])))
+    return out
+
+
+def embed_entries(
+    campaign_id: str,
+    db_path: Path | None = None,
+    embedder: Any | None = None,
+) -> int:
+    """给 memory_entries.embedding 列填充向量 BLOB（设计文档 §3.2 P2 / ticket 05）。
+
+    - embedder 为 callable `(text: str) -> list[float]`；无 embedder → 不写并返回 0；
+    - 某条调用抛错 → 停止并返回已处理数（诚实降级，不崩）；
+    - 幂等：已 embedding（embedding IS NOT NULL）的条目跳过。
+    返回本次实际写入 embedding 的条数。零 LLM。
+    """
+    if embedder is None:
+        return 0
+    conn = _connect(db_path)
+    processed = 0
+    try:
+        rows = conn.execute(
+            "SELECT id, content FROM memory_entries "
+            "WHERE campaign_id = ? AND embedding IS NULL",
+            (campaign_id,),
+        ).fetchall()
+        for row in rows:
+            try:
+                blob = _pack_vector(embedder(row["content"]))
+            except Exception:  # noqa: BLE001 - embedder 抛错 → 诚实降级
+                break
+            if not blob:
+                continue
+            conn.execute(
+                "UPDATE memory_entries SET embedding = ?, updated_at = ? WHERE id = ?",
+                (blob, _now(), row["id"]),
+            )
+            processed += 1
+    finally:
+        conn.close()
+    return processed
+
+
+def retrieve_memory(
+    campaign_id: str,
+    query: str,
+    db_path: Path | None = None,
+    k: int = 5,
+    embedder: Any | None = None,
+) -> list[dict]:
+    """记忆向量检索（设计文档 §3.5 P2 / ticket 05）。
+
+    - 有 embedding 的条目 → 余弦（纯 Python 嵌套列表，零新依赖）取 top-k；
+      查询向量由 embedder 计算（None 时复用 rag.get_embedder 批契约）。
+    - 无任何 embedding 条目 / 查询向量不可用 → 确定性降级：对该 campaign 的
+      active 条目做 BM25 评分取 top-k。
+    返回条目字典：{id, memory_type, content, score, importance, subject_key, source_episode}。
+    零 LLM。
+    """
+    if not query:
+        return []
+    rows = list_entries(campaign_id, db_path=db_path, status=_ACTIVE)
+    if not rows:
+        return []
+    embedded = [r for r in rows if r.get("embedding")]
+    if embedded:
+        qvec = _query_vector(query, embedder)
+        if qvec:
+            scored: list[tuple[float, dict]] = []
+            for r in embedded:
+                try:
+                    vec = _unpack_vector(r["embedding"])
+                except Exception:  # noqa: BLE001 - 损坏 BLOB 跳过该条
+                    continue
+                scored.append((_cosine(qvec, vec), r))
+            scored.sort(key=lambda x: x[0], reverse=True)
+            return [_result_dict(r, s) for s, r in scored[:k]]
+    return _bm25_retrieve(rows, query, k)
+
+
 __all__ = [
     "MEMORY_TYPES",
     "entries_db_path",
@@ -419,4 +1211,12 @@ __all__ = [
     "count_entries",
     "render_entries_doc",
     "assemble_memory_context",
+    "consolidate",
+    "record_session",
+    "current_play_status",
+    "list_play_sessions",
+    "supersede_entries",
+    "briefing",
+    "embed_entries",
+    "retrieve_memory",
 ]

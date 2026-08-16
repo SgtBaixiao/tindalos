@@ -45,6 +45,8 @@ _L6_REGRESSION_DELTA = 0.5
 # 预算估算单价（USD / 1M tokens，worst-case 上界）
 _PRICE_IN_USD_PER_M = 1.0
 _PRICE_OUT_USD_PER_M = 4.0
+# CoT 额外输出 token 系数（设计文档 §4.3：CoT +30~60%，预算取上界 +50%）
+_COT_OUTPUT_FACTOR = 1.5
 
 
 # --------------------------------------------------------------------------- #
@@ -81,7 +83,9 @@ def estimate_usd(
     """L3 judge 调用的最坏情况成本估算（调用前，零实际花费）。
 
     按 campaign 序列化长度 × 1.5 token/字符（中文保守上界）+ 提示词开销，
-    加上 4 维 JSON 输出 token 估算。对典型剧本（数千字符）远低于默认 $2。
+    加上 4 维 JSON 输出 token 估算；输出按 _COT_OUTPUT_FACTOR 计入 CoT
+    逐步推理额外 token（设计文档 §4.3：CoT +30~60%，取 +50% 上界）。
+    对典型剧本（数千字符）远低于默认 $2。
     """
     try:
         cdata = campaign.model_dump() if hasattr(campaign, "model_dump") else dict(campaign)
@@ -89,7 +93,7 @@ def estimate_usd(
     except Exception:  # noqa: BLE001 —— 无法序列化按字符串估算
         body = str(campaign)
     in_tokens = int(len(body) * 1.5) + 800  # +世界图/提示词开销
-    out_tokens = 400  # 4 维 JSON 输出
+    out_tokens = int(400 * _COT_OUTPUT_FACTOR)  # 4 维 JSON + CoT 推理输出（+50%）
     return (in_tokens * price_in_usd_per_m + out_tokens * price_out_usd_per_m) / 1_000_000
 
 
@@ -394,10 +398,15 @@ def run_eval(
                     llm_calls += 1
                     det = {"total": l1["total"], "dims": l1["dims"]}
                     res = j.evaluate(model, world, det)
+                    # judge_model / self_preference_risk 落 trace（设计文档 §3.5 L3 / §4.3）
+                    judge_meta = {
+                        "judge_model": res.get("judge_model"),
+                        "self_preference_risk": bool(res.get("self_preference_risk", False)),
+                    }
                     if res.get("judge") == "llm":
-                        layers["L3"] = {"status": "passed", "judge": "llm", "dims": res.get("dims")}
+                        layers["L3"] = {"status": "passed", "judge": "llm", "dims": res.get("dims"), **judge_meta}
                     else:
-                        layers["L3"] = {"status": "degraded", "reason": res.get("reason", "judge_failed")}
+                        layers["L3"] = {"status": "degraded", "reason": res.get("reason", "judge_failed"), **judge_meta}
 
             # ---------------- L4 faithfulness（零 LLM） ----------------
             l4 = _l4_faithfulness(model, search_fn, module_id)

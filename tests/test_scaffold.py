@@ -36,6 +36,14 @@ def test_settings_defaults():
     assert s.store_dir == Path("data/store")
 
 
+def test_settings_data_dir_override(monkeypatch):
+    """TINDALOS_DATA_DIR 生效：store_dir 落到 <dir>/store（与 history/web 一致）。"""
+    monkeypatch.setenv("TINDALOS_DATA_DIR", str(Path("var/data").resolve()))
+    config_module._settings = None
+    s = config_module.get_settings()
+    assert s.store_dir == Path("var/data").resolve() / "store"
+
+
 def test_settings_env_override(monkeypatch):
     """环境变量覆盖生效（default_factory 在实例化时读 env）。"""
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://example.test/v1")

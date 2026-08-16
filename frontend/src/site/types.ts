@@ -131,3 +131,81 @@ export type ClueView = {
   linked_npc_ids?: string[];
   linked_event_ids?: string[];
 };
+
+/* ----------------------------------------------------------------
+ * Eval —— 评测 trace（后端 eval_store.eval_runs / eval_annotations）。
+ * 字段按 web.py 三个 eval 端点真实响应声明，不臆造。
+ * ---------------------------------------------------------------- */
+
+/** 单条确定性检查（L1 checks）。 */
+export type EvalCheck = {
+  id: string;
+  name: string;
+  dims?: string[];
+  passed: boolean;
+  evidence?: string;
+};
+
+/** 维度结果：L1 为 {score, evidence[]}，L3（LLM judge）为 {score, comment, suggestion}。 */
+export type EvalDim = {
+  score?: number;
+  evidence?: string[];
+  comment?: string;
+  suggestion?: string;
+};
+
+/** 各层结果（L1..L6），字段按层存在与否宽松声明。 */
+export type EvalLayer = {
+  status?: string; // passed | failed | skipped | degraded | running
+  reason?: string; // skipped/degraded 的原因键（cascade_gate_failed 等）
+  total?: number;
+  dims?: Record<string, EvalDim>;
+  checks?: EvalCheck[];
+  problems?: string[];
+  judge?: string; // 'llm' | 'none'
+  estimate_usd?: number;
+  claim_count?: number;
+  supported?: number;
+  support_ratio?: number;
+  prior_total?: number;
+  current_total?: number;
+  delta?: number;
+  dim_deltas?: Record<string, number>;
+  regression?: boolean;
+};
+
+/** 评测运行（eval_runs 行；列表与详情共用）。 */
+export type EvalRun = {
+  run_id: string;
+  campaign_id?: string;
+  campaign_title?: string;
+  subject_type?: string;
+  subject_ref?: string;
+  params?: { module_id?: string; max_usd?: number };
+  layers?: Record<string, EvalLayer>;
+  verdict?: string | null; // pass | warning | fail | error
+  status?: string; // running | completed | short_circuited | error
+  budget_spent_usd?: number;
+  duration_ms?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/** 标注里的证据引用（L4 faithfulness 的 evidence_refs）。 */
+export type EvalEvidenceRef = {
+  module_id?: string;
+  chunk_index?: number;
+  score?: number;
+};
+
+/** 单条标注（eval_annotations 行；GET /api/eval/runs/{id} → annotations）。 */
+export type EvalAnnotation = {
+  annotation_id: string;
+  run_id?: string;
+  layer?: string;
+  subject_ref?: string;
+  score?: number;
+  explanation?: string;
+  evidence_refs?: EvalEvidenceRef[];
+  created_at?: string;
+};

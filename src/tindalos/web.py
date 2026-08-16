@@ -354,7 +354,12 @@ def create_app() -> FastAPI:
 
         try:
             generator = _resolve_serve_generator(body.llm)
-            updated, applied = regenerate_node(campaign, body.node_id, generator)
+            updated, applied = regenerate_node(
+                campaign,
+                body.node_id,
+                generator,
+                db_path=_data_dir() / "store" / "memory_entries.sqlite",
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         doc_out = updated.model_dump(mode="json") if hasattr(updated, "model_dump") else updated
@@ -615,6 +620,50 @@ def create_app() -> FastAPI:
             db_path=_eval_db_path(),
         )
         return {"trace": trace}
+
+    # ---------------------------------------------------------- 记忆（P1 记忆核心）
+
+    @app.get("/api/memories/{campaign_id}")
+    async def api_memories(campaign_id: str):
+        """四类记忆 + 最近游玩状态（设计文档 §4.5 / P1 ticket 01）。
+
+        campaign 无记忆时返回空四类与 play_status=None，不 404（记忆是增强层，
+        与生成/历史解耦，本地文件不存在也应诚实返回空而不是报错）。
+        """
+        from tindalos import memory_entries as me
+
+        db = _data_dir() / "store" / "memory_entries.sqlite"
+        memories: dict[str, list[dict[str, Any]]] = {}
+        for mt in me.MEMORY_TYPES:
+            items: list[dict[str, Any]] = []
+            for r in me.list_entries(campaign_id, mt, db):
+                refs = r.get("ref_ids")
+                if isinstance(refs, str):
+                    try:
+                        refs = json.loads(refs)
+                    except json.JSONDecodeError:
+                        refs = None
+                items.append(
+                    {
+                        "id": r["id"],
+                        "memory_type": r["memory_type"],
+                        "content": r["content"],
+                        "importance": r["importance"],
+                        "subject_key": r["subject_key"],
+                        "source_episode": r["source_episode"],
+                        "ref_ids": refs,
+                        "status": r["status"],
+                        "created_at": r["created_at"],
+                    }
+                )
+            memories[mt] = items
+        return {
+            "campaign_id": campaign_id,
+            "status": "ok",
+            "play_status": me.current_play_status(campaign_id, db),
+            "briefing": me.briefing(campaign_id, db),
+            "memories": memories,
+        }
 
     # ---------------------------------------------------------- 静态托管
 

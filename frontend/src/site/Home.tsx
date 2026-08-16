@@ -1,5 +1,5 @@
 /**
- * site/Home.tsx —— 首页：四个栏目入口节点 + 标语。
+ * site/Home.tsx —— 首页：栏目入口节点 + 标语。
  * 每个节点是一个「格子」：符号 + 标题 + 一句话描述，stagger 错峰揭示，点击跳 hash。
  */
 
@@ -36,6 +36,12 @@ export const COLUMNS: Column[] = [
     mark: '◷',
     title: '历史记录',
     desc: '回看生成剧本与上传模组，随时重放',
+  },
+  {
+    route: 'eval',
+    mark: '⌬',
+    title: '评测',
+    desc: '六层评测 trace：结构 / 图谱 / 质量 / 忠实度 / KP / 回归',
   },
 ];
 

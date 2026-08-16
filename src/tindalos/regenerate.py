@@ -19,7 +19,10 @@ scene 事件重产公共函数 regenerate_scene_events 收编自 evolve._regener
 
 from __future__ import annotations
 
+import hashlib
+import json
 import warnings
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -221,12 +224,20 @@ def _validate_regenerated(campaign: Campaign) -> None:
 # ---------------------------------------------------------------- 主入口
 
 def regenerate_node(
-    campaign: Any, node_id: str, generator: Any = None
+    campaign: Any,
+    node_id: str,
+    generator: Any = None,
+    *,
+    db_path: Path | None = None,
 ) -> tuple[Campaign, list[str]]:
     """重生成单个节点 → (新 Campaign 深拷贝, applied 清单)；未知 id → ValueError。
 
     输入 Campaign/dict 均不修改（内部深拷贝）；重生成后重建 world + 宽松构造 + 严格校验，
     任一失败（含生成器异常/引用悬空）→ 回滚为输入原样 + UserWarning（applied 为空）。
+
+    P1 #3 记忆一致性钩子：传入 db_path（memory_entries.sqlite 路径）时，成功路径自动
+    同步记忆（capture_episodic + 相关 semantic/longterm 置 superseded 并写新版）；
+    失败/回滚不写记忆。默认 None → 纯重生成，行为不变（cli/serve 契约）。
     """
     original = _coerce_campaign(campaign)
     work = original.model_copy(deep=True)
@@ -256,7 +267,163 @@ def regenerate_node(
             UserWarning, stacklevel=2,
         )
         return original, []
+    if db_path is not None:
+        _apply_memory_hook(work, nid, kind, db_path)  # 仅成功路径（失败/回滚已提前返回）
     return work, applied
+
+
+# ---------------------------------------------------------------- P1 #3 记忆一致性钩子
+
+
+def _clip_200(text: str) -> str:
+    """与 memory_entries._clip 同构：纯截断到 200 字（不复用 24 字 _clip，避免哈希判重漂移）。"""
+    return text if len(text) <= 200 else text[:200] + "…"
+
+
+def _related_subject_keys(kind: str, node_id: str) -> list[str]:
+    """节点种类 → 相关语义 subject_key（npc 节点 → npc:<id>；scene 节点 → place:<id>）。"""
+    if kind == "npc":
+        return [f"npc:{node_id}"]
+    if kind == "scene":
+        return [f"place:{node_id}"]
+    return []
+
+
+def _entry_refers_node(row: dict, node_id: str, episodic_id: str) -> bool:
+    """条目 ref_ids 是否引用该节点（含事件的情景条目 id evm:<cid>:<event>）。"""
+    try:
+        refs = json.loads(row.get("ref_ids") or "[]")
+    except (TypeError, ValueError):
+        return False
+    return node_id in refs or episodic_id in refs
+
+
+def _related_memory_rows(
+    campaign_id: str, subject_keys: list[str], node_id: str, db_path: Path | None
+) -> list[dict]:
+    """regenerate 改动的节点 → 相关 active semantic/longterm 条目。
+
+    匹配：subject_key 由节点 id 派生（npc:<id>/place:<id>），或 ref_ids 引用该节点。
+    """
+    from tindalos import memory_entries as me
+
+    episodic_id = f"evm:{campaign_id}:{node_id}"
+    related: list[dict] = []
+    for mt in ("semantic", "longterm"):
+        for row in me.list_entries(campaign_id, mt, db_path, status="active"):
+            if subject_keys and row.get("subject_key") in subject_keys:
+                related.append(row)
+            elif _entry_refers_node(row, node_id, episodic_id):
+                related.append(row)
+    return related
+
+
+def _refresh_semantic_content(campaign: Campaign, row: dict) -> str | None:
+    """由重生成后的 Campaign 重算语义条目内容（与 memory_entries._semantic_items 同构）。"""
+    from tindalos.memory import npc_impression  # 延迟导入避免循环依赖
+
+    sk = row.get("subject_key") or ""
+    if sk.startswith("npc:"):
+        npc = campaign.npcs.get(sk[len("npc:"):])
+        if npc is None:
+            return None
+        return _clip_200(npc_impression(npc))
+    if sk.startswith("place:"):
+        scene_id = sk[len("place:"):]
+        for act in campaign.acts:
+            for scene in act.scenes:
+                if scene.id != scene_id:
+                    continue
+                setting = scene.setting or {}
+                time_, place = setting.get("time", ""), setting.get("place", "")
+                if not (time_ or place):
+                    return None
+                return _clip_200(
+                    f"[{act.title}·{scene.title}] 地点：{place or '未知'}，时间：{time_ or '未知'}"
+                )
+    return None
+
+
+def _refresh_memory_content(
+    campaign: Campaign, row: dict, db_path: Path | None
+) -> str | None:
+    """重生成后重算相关条目内容：semantic 从新 Campaign 派生；longterm 确定性重算。
+
+    无法确定性重算（自定义 subject_key）→ None，钩子跳过该条（不擅自改动）。
+    """
+    if row.get("memory_type") == "semantic":
+        return _refresh_semantic_content(campaign, row)
+    if row.get("memory_type") == "longterm":
+        from tindalos import memory_entries as me
+
+        key = row.get("subject_key") or ""
+        if key not in ("synopsis", "plotline", "npc_arcs"):
+            return None
+        episodic = me.list_entries(campaign.id, "episodic", db_path, status="active")
+        semantic = me.list_entries(campaign.id, "semantic", db_path, status="active")
+        return me._deterministic_longterm(campaign.id, key, episodic + semantic)
+    return None
+
+
+def _versioned_id(campaign_id: str, row: dict, content: str) -> str:
+    """新版本条目 id：内容哈希后缀（与 memory_entries._apply_ops / _write_longterm 同构）。"""
+    c_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+    prefix = "sem" if row.get("memory_type") == "semantic" else "ltm"
+    return f"{prefix}:{campaign_id}:{row.get('subject_key') or 'item'}:{c_hash}"
+
+
+def _apply_memory_hook(campaign: Campaign, node_id: str, kind: str, db_path: Path) -> None:
+    """regenerate 成功后的记忆一致性钩子（设计文档 §3.3 修复钩子 / 风险表第 4 行）。
+
+    1. capture_episodic：整份 campaign 幂等 upsert（未变事件 content_hash 相同 → 跳过）；
+    2. 相关 semantic/longterm（subject_key 命中该节点 / ref_ids 引用该节点）：
+       内容有变化 → 写新版（id 含内容哈希）+ 旧版用 supersede_entries 置 superseded
+       （supersedes_id 链）；内容未变 → 保持 active（无漂移即不版本化）。
+    失败只告警不回滚：记忆是增强层，绝不阻断 regenerate 成功返回。
+    """
+    try:
+        from tindalos import memory_entries as me
+
+        me.capture_episodic(campaign, db_path)  # (a) 情景条目覆盖新内容
+
+        subject_keys = _related_subject_keys(kind, node_id)
+        related = _related_memory_rows(campaign.id, subject_keys, node_id, db_path)
+        if not related:
+            return
+        to_version: list[tuple[dict, str]] = []
+        for row in related:
+            content = _refresh_memory_content(campaign, row, db_path)
+            if content is None:
+                continue
+            if hashlib.sha256(content.encode("utf-8")).hexdigest() == row.get("content_hash"):
+                continue  # 内容未变 → 无漂移，保持 active
+            to_version.append((row, content))
+        if not to_version:
+            return
+        me.supersede_entries(campaign.id, db_path, ids=[r["id"] for r, _ in to_version])  # (b) 旧版置 superseded
+        conn = me._connect(db_path)
+        try:
+            for row, content in to_version:
+                new_id = _versioned_id(campaign.id, row, content)
+                me._insert_entry(
+                    conn,
+                    campaign.id,
+                    row.get("memory_type") or "semantic",
+                    new_id,
+                    content,
+                    subject_key=row.get("subject_key"),
+                    ref_ids=json.loads(row.get("ref_ids") or "[]"),
+                    source_episode=row.get("source_episode"),
+                    importance=float(row.get("importance") or 0.6),
+                )
+                conn.execute(
+                    "UPDATE memory_entries SET supersedes_id = ?, updated_at = ? WHERE id = ?",
+                    (new_id, me._now(), row["id"]),
+                )
+        finally:
+            conn.close()
+    except Exception as e:  # noqa: BLE001 —— 记忆增强失败绝不阻断 regenerate
+        warnings.warn(f"记忆一致性钩子失败，已跳过：{e}", UserWarning, stacklevel=2)
 
 
 __all__ = ["regenerate_node", "regenerate_scene_events"]

@@ -16,12 +16,16 @@
  *  - POST /api/qa                            → {answer, sources, mode}
  *  - GET  /api/campaigns                     → {campaigns}
  *  - GET  /api/campaigns/<id>                → {campaign, meta}
+ *  - GET  /api/eval/runs                     → {runs}
+ *  - GET  /api/eval/runs/<run_id>            → {run, annotations}
  */
 
 import { fetchGenerateStream, type SseFrame } from '../lib/live';
 import type {
   Campaign,
   CampaignMeta,
+  EvalAnnotation,
+  EvalRun,
   Module,
   ModuleDetail,
   QaResult,
@@ -141,5 +145,19 @@ export async function listCampaigns(): Promise<{ campaigns: CampaignMeta[] }> {
 export async function getCampaign(id: string): Promise<{ campaign: Campaign; meta?: CampaignMeta }> {
   return request<{ campaign: Campaign; meta?: CampaignMeta }>(
     `/api/campaigns/${encodeURIComponent(id)}`,
+  );
+}
+
+/** 评测运行列表（新→旧：run_id / 时间 / verdict / 预算 / 分层概要）。 */
+export async function listEvalRuns(): Promise<{ runs: EvalRun[] }> {
+  return request<{ runs: EvalRun[] }>('/api/eval/runs');
+}
+
+/** 单次评测详情：完整 run（L1..L6 trace）+ 各层标注（含 evidence_refs）。 */
+export async function getEvalRun(
+  runId: string,
+): Promise<{ run: EvalRun; annotations: EvalAnnotation[] }> {
+  return request<{ run: EvalRun; annotations: EvalAnnotation[] }>(
+    `/api/eval/runs/${encodeURIComponent(runId)}`,
   );
 }

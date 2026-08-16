@@ -247,7 +247,7 @@ Tindalos 用一条完整链路回答：LangGraph 多智能体编排（KP 主控 
 
 - *为什么不用 supervisor？* 官方已标记弃维护；KP→NPC 是确定流程 + 并行子任务，StateGraph + Send 更贴切，可控可测。
 - *为什么知识图谱不上 Neo4j？* 数百节点本地场景 NetworkX + JSON 图足够；图的价值在**可解释多跳推理、时间有效窗（当时为真 vs 现在为真）、实体中心记忆**，不在存储引擎。Kuzu 已弃维护，graphiti/cognee 是业界参照（LongMemEval +18.5%）。
-- *eval 的分数可信吗？* 确定性检查可复现；LLM-judge 双模型取 min 保守聚合（dualJudge）；归因先查评测的锅（CORE-bench 42%→95% 案例），再谈模型。
+- *eval 的分数可信吗？* 确定性检查可复现；LLM-judge 单模型 4 维 rubric（结构/一致性/深度/可玩性）加 CoT + evidence_refs，LLM 不可用时确定性降级；归因先查评测的锅（CORE-bench 42%→95% 案例），再谈模型。
 - *自进化会不会越修越坏？* 确定性修复白名单 + 收敛提前终止 + 幂等（同输入两次运行结果一致）+ rounds 上限；LLM 建议只记 pending 不自动应用（人审待定）。
 
 **一键演示路径**：
