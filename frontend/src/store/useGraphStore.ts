@@ -6,47 +6,67 @@
  */
 
 import { create } from 'zustand';
-import type { GraphEdge, GraphNode, NodeType } from '../lib/types';
+import { buildScriptGraph, layoutGraph } from '../lib/scriptGraph';
+import type { CampaignView, GraphEdge, GraphNode, NodeType } from '../lib/types';
 
 export const UNDO_LIMIT = 10;
 
-type Snapshot = { nodes: GraphNode[]; edges: GraphEdge[] };
-
-/** 对 nodes 的浅快照（data 一层展开复制，足以还原文本编辑）。 */
-function snapshot(nodes: GraphNode[], edges: GraphEdge[]): Snapshot {
-  return {
-    nodes: nodes.map((n) => ({ ...n, data: { ...n.data } })),
-    edges: edges.map((e) => ({ ...e })),
-  };
-}
+type Snapshot = { id: string; data: Record<string, unknown> };
 
 export type NodeChangeLike =
   | { type: 'position'; id: string; position?: { x: number; y: number } }
   | { type: 'remove'; id: string }
-  | { type: 'select'; id: string; selected: boolean };
+  | { type: 'select'; id: string; selected: boolean }
+  | { type: 'dimensions'; id: string; dimensions?: { width: number; height: number } };
 
 /** 最小化的变更应用（等价于 @xyflow/react 的 applyNodeChanges 子集，避免在
  *  纯测试环境拖入整个 React Flow 运行时）。 */
 export function applyNodeChanges(changes: NodeChangeLike[], nodes: GraphNode[]): GraphNode[] {
-  let next = nodes;
+  const byId = new Map<string, NodeChangeLike[]>();
   for (const change of changes) {
-    if (change.type === 'position' && change.position) {
-      const pos = change.position; // 闭包内保窄（TS 属性收窄不穿透回调）
-      next = next.map((n) =>
-        n.id === change.id ? { ...n, position: { x: pos.x, y: pos.y } } : n,
-      );
-    } else if (change.type === 'remove') {
-      next = next.filter((n) => n.id !== change.id);
-    } else if (change.type === 'select') {
-      next = next.map((n) =>
-        n.id === change.id ? { ...n, selected: change.selected } : n,
-      );
-    }
+    const group = byId.get(change.id);
+    if (group) group.push(change);
+    else byId.set(change.id, [change]);
   }
-  return next;
+  let changed = false;
+  const result = nodes.flatMap((node) => {
+    let next = node;
+    for (const change of byId.get(node.id) ?? []) {
+      if (change.type === 'remove') {
+        changed = true;
+        return [];
+      }
+      if (
+        change.type === 'position' &&
+        change.position &&
+        (next.position.x !== change.position.x || next.position.y !== change.position.y)
+      )
+        next = { ...next, position: change.position };
+      if (change.type === 'select' && Boolean(next.selected) !== change.selected)
+        next = { ...next, selected: change.selected };
+      if (
+        change.type === 'dimensions' &&
+        change.dimensions &&
+        (next.measured?.width !== change.dimensions.width ||
+          next.measured?.height !== change.dimensions.height)
+      )
+        next = { ...next, measured: change.dimensions };
+    }
+    if (next !== node) changed = true;
+    return [next];
+  });
+  return changed ? result : nodes;
 }
 
 export type GraphState = {
+  campaign: CampaignView | null;
+  revision: number | null;
+  structureKey: string;
+  adoptCampaign: (
+    campaign: CampaignView,
+    revision: number | null,
+    preservePositions?: boolean,
+  ) => void;
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedId: string | null;
@@ -71,6 +91,33 @@ export type GraphState = {
 };
 
 export const useGraphStore = create<GraphState>()((set, get) => ({
+  campaign: null,
+  revision: null,
+  structureKey: '',
+  adoptCampaign: (campaign, revision, preservePositions = true) =>
+    set((state) => {
+      const mapped = buildScriptGraph(campaign);
+      const old = new Map(state.nodes.map((n) => [n.id, n]));
+      const sameStructure =
+        mapped.nodes.length === state.nodes.length && mapped.nodes.every((n) => old.has(n.id));
+      const laid =
+        preservePositions && sameStructure ? mapped.nodes : layoutGraph(mapped.nodes, mapped.edges);
+      return {
+        campaign,
+        revision,
+        campaignId: campaign.id,
+        edges: mapped.edges,
+        structureKey: campaign.id + ':' + mapped.nodes.map((n) => n.id).join('|'),
+        nodes: laid.map((n) => {
+          const previous = old.get(n.id);
+          return preservePositions && previous
+            ? { ...n, position: previous.position, measured: previous.measured }
+            : n;
+        }),
+        selectedId: mapped.nodes.some((n) => n.id === state.selectedId) ? state.selectedId : null,
+        past: [],
+      };
+    }),
   nodes: [],
   edges: [],
   selectedId: null,
@@ -78,14 +125,34 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
   past: [],
 
   loadGraph: (nodes, edges, campaignId = null) =>
-    set({ nodes, edges, selectedId: null, past: [], campaignId }),
+    set({
+      nodes,
+      edges,
+      selectedId: null,
+      past: [],
+      campaignId,
+      campaign: null,
+      revision: null,
+      structureKey: nodes.map((n) => n.id).join('|'),
+    }),
 
   setCampaignId: (id) => set({ campaignId: id }),
 
   onNodesChange: (changes) =>
-    set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),
+    set((state) => {
+      const nodes = applyNodeChanges(changes, state.nodes);
+      return nodes === state.nodes
+        ? state
+        : {
+            nodes,
+            structureKey:
+              nodes.length !== state.nodes.length
+                ? nodes.map((n) => n.id).join('|')
+                : state.structureKey,
+          };
+    }),
 
-  setNodes: (nodes) => set({ nodes }),
+  setNodes: (nodes) => set({ nodes, structureKey: nodes.map((n) => n.id).join('|') }),
 
   setEdges: (edges) => set({ edges }),
 
@@ -95,11 +162,12 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
     set((state) => {
       if (!state.nodes.some((n) => n.id === id)) return state;
       return {
-        nodes: state.nodes.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
-        ),
+        nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
         // 快照 = 编辑前的整图；栈上限 UNDO_LIMIT（最近 10 步）。
-        past: [...state.past.slice(-(UNDO_LIMIT - 1)), snapshot(state.nodes, state.edges)],
+        past: [
+          ...state.past.slice(-(UNDO_LIMIT - 1)),
+          { id, data: state.nodes.find((n) => n.id === id)!.data },
+        ],
       };
     }),
 
@@ -115,8 +183,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
       if (state.past.length === 0) return state;
       const prev = state.past[state.past.length - 1];
       return {
-        nodes: prev.nodes,
-        edges: prev.edges,
+        nodes: state.nodes.map((n) => (n.id === prev.id ? { ...n, data: prev.data } : n)),
         past: state.past.slice(0, -1),
       };
     }),

@@ -30,6 +30,11 @@ try:  # requests 为可选（离线无网络时缺省降级；在线路径缺 re
 except ImportError:  # pragma: no cover - 依赖探测已确认安装，此分支仅防御
     requests = None  # type: ignore[assignment]
 
+import os
+import threading
+
+_MODEL_SLOTS = threading.BoundedSemaphore(max(1,int(os.environ.get("TINDALOS_MODEL_CONCURRENCY","4"))))
+
 LLM_KINDS = ("no_requests", "timeout", "connection", "http_4xx", "http_5xx", "http_429", "parse_failed")
 
 # ResponseLike：transport 返回值（requests.Response 或测试 fake）
@@ -198,7 +203,12 @@ class LLMClient:
     # -- 底层 POST（统一重试） --
 
     def _request(self, method: str, url: str, **kw) -> Any:
-        return self._transport(method, url, **kw)
+        if not _MODEL_SLOTS.acquire(timeout=float(kw.get("timeout", 60))):
+            raise TimeoutError("model concurrency admission timed out")
+        try:
+            return self._transport(method, url, **kw)
+        finally:
+            _MODEL_SLOTS.release()
 
     def _classify_status(self, status: int, resp: Any) -> LLMError:
         text = getattr(resp, "text", "")[:200]

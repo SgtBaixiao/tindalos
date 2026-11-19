@@ -180,7 +180,7 @@ def test_regenerate_scene_preserves_fields_stable_ids():
     assert scene.npc_ids == ["npc-1", "npc-2"]
     # 事件 id 稳定（scene.id 模式）+ 链式 next_event_ids 重建
     assert [e.id for e in scene.events] == ["scene-1-ev-1", "scene-1-ev-2", "scene-1-ev-3"]
-    assert scene.events[0].next_event_ids == ["scene-1-ev-2", "scene-1-ev-3"]
+    assert scene.events[0].next_event_ids == ["scene-1-ev-2"]
     assert scene.events[1].next_event_ids == ["scene-1-ev-3"]
     assert scene.events[2].next_event_ids == []
     # 内容已重产（来自生成器草案，非原稿）
@@ -489,7 +489,7 @@ def test_regenerate_scene_events_public_api():
     n = regenerate_scene_events(GEN, cam, act, scene, used)
     assert n == 3
     assert [e.id for e in scene.events] == ["scene-1-ev-1", "scene-1-ev-2", "scene-1-ev-3"]
-    assert scene.events[0].next_event_ids == ["scene-1-ev-2", "scene-1-ev-3"]
+    assert scene.events[0].next_event_ids == ["scene-1-ev-2"]
     assert scene.events[2].next_event_ids == []
 
 

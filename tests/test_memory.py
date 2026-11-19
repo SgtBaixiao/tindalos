@@ -351,6 +351,9 @@ def test_assemble_memory_context_retrieves_relevant(tmp_path):
     db = entries_db_path(make_settings(tmp_path))
     capture_memory_entries(campaign, db)
     first_ev_title = campaign.acts[0].scenes[0].events[0].title
+    assert assemble_memory_context(campaign.id, first_ev_title, db_path=db) == ""
+    from tindalos.memory_entries import record_session
+    record_session(campaign.id, f"实际发生：{first_ev_title}", db_path=db)
     ctx = assemble_memory_context(campaign.id, f"{first_ev_title} 发生了什么", db_path=db)
     assert ctx.startswith("【既有记忆】")
     assert "（情景记忆）" in ctx or "（语义记忆）" in ctx

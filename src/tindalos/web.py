@@ -45,7 +45,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -61,7 +61,10 @@ MAX_UPLOAD_BYTES = 128 * 1024 * 1024  # 128MB（守秘人规则书 16MB 余量�
 
 
 class GenerateRequest(BaseModel):
-    module_text: str
+    module_text: str = Field(default="", max_length=2_000_000)
+    module_id: str | None = None
+    campaign_id: str | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
     llm: bool = False
     rules: str = "COC7"
     # 模组图像视觉识别结果（spec §四.3）：kind/name/caption 透传给 default_generate 注入生成上下文。
@@ -69,6 +72,7 @@ class GenerateRequest(BaseModel):
 
 
 class RegenerateRequest(BaseModel):
+    expected_revision: int | None = Field(default=None, ge=1)
     campaign_id: str
     node_id: str
     llm: bool = False
@@ -101,6 +105,12 @@ class EvalRunRequest(BaseModel):
     max_usd: float | None = None
 
 
+class HumanReviewRequest(BaseModel):
+    revision: int = Field(ge=1)
+    usable: bool
+    notes: str = Field(min_length=1, max_length=20_000)
+
+
 class ConfirmImageRequest(BaseModel):
     image_path: str
     kind: str
@@ -114,9 +124,16 @@ class RecordSessionRequest(BaseModel):
     summary 必填（非空）；play_status / conflicts 可选。conflicts 为分歧/规则裁定
     记录列表，交由 record_session json.dumps 落库（读回时解析回对象）。
     """
-    summary: str
+    summary: str = Field(max_length=100_000)
     play_status: str | None = None
     conflicts: list[dict[str, Any]] | None = None
+    request_key: str | None = None
+    facts: list[dict[str, str]] = Field(default_factory=list, max_length=200)
+
+
+class EditNodeRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+    patch: dict[str, Any]
 
 
 # ---------------------------------------------------------------- 路径与状态
@@ -241,25 +258,13 @@ def _session_payload(row: dict) -> dict:
 def _find_module_by_sha256(sha256: str) -> dict | None:
     from tindalos import history as history_mod
 
-    for row in history_mod.list_modules():
-        if row.get("sha256") == sha256:
-            return row
-    return None
+    return history_mod.find_module_by_hash(sha256)
 
 
 def _load_campaign_for_regenerate(campaign_id: str) -> dict:
-    """regenerate/campaigns 读取：内存缓存 → 历史库快照。"""
-    state = _state
-    with state.lock:
-        raw = state.campaigns.get(campaign_id)
-    if raw is not None:
-        return raw
-    try:
-        from tindalos import history as history_mod
-
-        rec = history_mod.get_campaign(campaign_id)
-    except Exception:  # noqa: BLE001 - 历史模块缺失/损坏 → 当作未找到
-        rec = None
+    """Load the authoritative saved snapshot. Storage failures remain server errors."""
+    from tindalos import history as history_mod
+    rec = history_mod.get_campaign(campaign_id)
     if rec is None or not rec.get("snapshot"):
         raise HTTPException(status_code=404, detail="campaign not found")
     return rec["snapshot"]
@@ -271,17 +276,43 @@ def _load_campaign_for_regenerate(campaign_id: str) -> dict:
 def create_app() -> FastAPI:
     """构造站点后端 app（测试可隔离实例；数据目录随环境变量 TINDALOS_DATA_DIR）。"""
 
+    from tindalos.jobs import JobRuntime, CapacityError, TERMINAL
+    from tindalos import workspace
+
+    def execute_generation(body, emit):
+        import inspect
+        from tindalos import memory_entries as me
+        cid = body.get("campaign_id") or "campaign-" + uuid.uuid4().hex
+        continuation = me.continuation_context(cid, _data_dir() / "store" / "memory_entries.sqlite")
+        if body.get("campaign_id"):
+            adopted = body['base_snapshot']
+            outline = {'title':adopted.get('title'), 'acts':[
+                {'title':a.get('title'),'summary':a.get('summary')} for a in adopted.get('acts',[])]}
+            continuation += "\n【当前采用剧本提纲】\n" + json.dumps(outline, ensure_ascii=False)[:24000]
+        options = {"module_images":body.get("module_images"),"campaign_id":cid,
+                   "rules":body.get("rules","COC7"),"continuation":continuation,"persist_memory":False}
+        options["adopted_npcs"] = body.get("base_snapshot", {}).get("npcs", {})
+        signature = inspect.signature(default_generate)
+        options = {k:v for k,v in options.items() if k in signature.parameters}
+        generated = default_generate(body["module_text"], body.get("llm",False), emit, **options)
+        if generated and body.get("campaign_id"):
+            return workspace.append_continuation(body["base_snapshot"], generated, body["expected_revision"])
+        return generated
+
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # noqa: ARG001 - 生命周期：初始化数据目录 + 历史库
+    async def lifespan(app: FastAPI):
         _modules_dir().mkdir(parents=True, exist_ok=True)
+        from tindalos import history as history_mod
+        app.state.runtime = JobRuntime(execute_generation,
+            workers=max(1,int(os.environ.get("TINDALOS_JOB_WORKERS","2"))),
+            capacity=max(2,int(os.environ.get("TINDALOS_JOB_CAPACITY","16"))),
+            max_duration=max(1,float(os.environ.get('TINDALOS_JOB_TIMEOUT','600'))))
         try:
-            from tindalos import history as history_mod
+            yield
+        finally:
+            await asyncio.to_thread(app.state.runtime.close)
 
-            history_mod.init_db()
-        except Exception as e:  # noqa: BLE001 - 历史库缺失/损坏不阻塞服务启动
-            print(f"[web] 历史库初始化失败（{e}）——历史记录端点将不可用")
-        yield
-
+    from tindalos import history as history_mod
     app = FastAPI(title="SgtXLonelyHeartsClub API", version=VERSION, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
@@ -294,117 +325,109 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict:
-        return {"ok": True, "version": VERSION}
+        return {"ok": True, "version": VERSION, "runtime":"single_process", "storage":"sqlite_wal", "job_workers":app.state.runtime.workers, "capacity":app.state.runtime.capacity}
 
     # ---------------------------------------------------------- 生成（SSE）
 
+    def submit_job(body, key=None):
+        try:
+            identity = body.model_dump(exclude_none=True)
+            if key:
+                prior = app.state.runtime.lookup(key, identity)
+                if prior:
+                    return prior
+            prepared = workspace.prepare_generation(identity)
+            return app.state.runtime.submit(prepared, key=key, identity=identity)
+        except CapacityError as exc:
+            raise HTTPException(429, str(exc), headers={"Retry-After":"1"})
+        except history_mod.RevisionConflict as exc:
+            raise HTTPException(409, str(exc))
+        except LookupError as exc:
+            raise HTTPException(404, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+    async def job_stream(job_id, after=0, with_ids=True):
+        cursor = after
+        last_heartbeat = asyncio.get_running_loop().time()
+        while True:
+            events = await asyncio.to_thread(app.state.runtime.events, job_id, cursor)
+            for event in events:
+                cursor = event["sequence"]
+                yield (f"id:{cursor}\n".encode() if with_ids else b"") + sse_frame(event["payload"])
+            info = await asyncio.to_thread(app.state.runtime.get, job_id)
+            if not events and info["status"] in TERMINAL:
+                break
+            now = asyncio.get_running_loop().time()
+            if now - last_heartbeat > 10:
+                yield b":heartbeat\n\n"
+                last_heartbeat = now
+            await asyncio.sleep(0.05)
+
+    def stream_response(job, after=0, with_ids=True):
+        return StreamingResponse(job_stream(job["id"],after,with_ids), media_type="text/event-stream",
+            headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no","X-Job-ID":job["id"]})
+
+    @app.post("/api/jobs", status_code=202)
+    def api_submit_job(body: GenerateRequest, idempotency_key: str | None = Header(default=None)):
+        return {"job":submit_job(body,idempotency_key)}
+
+    @app.get("/api/jobs/{job_id}")
+    def api_get_job(job_id: str):
+        job = app.state.runtime.get(job_id)
+        if not job:
+            raise HTTPException(404,"job not found")
+        return {"job":job}
+
+    @app.delete("/api/jobs/{job_id}")
+    def api_cancel_job(job_id: str):
+        job = app.state.runtime.cancel(job_id)
+        if not job:
+            raise HTTPException(404,"job not found")
+        return {"job":job}
+
+    @app.get("/api/jobs/{job_id}/events")
+    def api_job_events(job_id: str, after: int = 0, last_event_id: str | None = Header(default=None)):
+        job = app.state.runtime.get(job_id)
+        if not job:
+            raise HTTPException(404,"job not found")
+        try:
+            cursor = max(0,int(last_event_id)) if last_event_id else max(0,after)
+        except ValueError:
+            raise HTTPException(400,"invalid event cursor")
+        return stream_response(job,cursor)
+
     @app.post("/api/generate")
-    async def api_generate(body: GenerateRequest):
-        module_text = body.module_text.strip()
-        if not module_text:
-            raise HTTPException(status_code=400, detail="module_text 必填非空字符串")
-
-        def stream() -> AsyncGenerator[bytes, None]:
-            q: queue.Queue = queue.Queue(maxsize=64)
-            stop = threading.Event()
-
-            def emit(stage: str, message: str) -> bool:
-                if stop.is_set():
-                    return False
-                try:
-                    q.put(("event", stage, message), timeout=1)
-                except queue.Full:
-                    return False
-                return True
-
-            def worker() -> None:
-                try:
-                    campaign = default_generate(module_text, body.llm, emit, module_images=body.module_images)
-                    if campaign is not None:
-                        q.put(("done", campaign))
-                except Exception as e:  # noqa: BLE001 - 生成失败转为 SSE 错误帧
-                    q.put(("failed", str(e)))
-                finally:
-                    q.put(("__eof__", None))
-
-            t = threading.Thread(target=worker, daemon=True)
-            t.start()
-            try:
-                while True:
-                    try:
-                        item = q.get(timeout=0.25)
-                    except queue.Empty:
-                        if stop.is_set():
-                            break
-                        continue
-                    kind = item[0]
-                    if kind == "event":
-                        yield sse_frame({"stage": item[1], "message": item[2]})
-                    elif kind == "done":
-                        campaign = item[1]
-                        if isinstance(campaign, dict) and campaign.get("id"):
-                            try:
-                                from tindalos import history as history_mod
-
-                                history_mod.register_campaign(
-                                    campaign["id"],
-                                    str(campaign.get("title", "")),
-                                    _validate_rules(str(campaign.get("rules", "COC7"))),
-                                    campaign,
-                                )
-                            except Exception:  # noqa: BLE001 - 持久化失败不回滚生成结果
-                                pass
-                            with _state.lock:
-                                _state.campaigns[campaign["id"]] = campaign
-                        yield sse_frame({"done": True, "campaign": campaign})
-                        stop.set()
-                        break
-                    elif kind == "failed":
-                        yield sse_frame({"error": str(item[1])})
-                        yield sse_frame({"done": True, "campaign": None})
-                        stop.set()
-                        break
-                    else:  # __eof__
-                        break
-            finally:
-                stop.set()
-                t.join(timeout=5)
-
-        return StreamingResponse(
-            stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "close", "X-Accel-Buffering": "no"},
-        )
+    def api_generate(body: GenerateRequest, idempotency_key: str | None = Header(default=None)):
+        return stream_response(submit_job(body,idempotency_key),with_ids=False)
 
     # ---------------------------------------------------------- campaign 读取 / 重生成
 
     @app.get("/api/campaigns")
-    async def api_campaigns():
+    def api_campaigns():
         from tindalos import history as history_mod
 
         return {"campaigns": history_mod.list_campaigns()}
 
     @app.get("/api/campaigns/{campaign_id}")
-    async def api_campaign(campaign_id: str) -> JSONResponse:
+    def api_campaign(campaign_id: str) -> JSONResponse:
         # {campaign, meta}：serve 契约向前兼容——工作台 fetchCampaignJson 以
         # json.campaign ?? json 取值，两种形状都可用；site 层直接读 campaign/meta。
-        campaign = _load_campaign_for_regenerate(campaign_id)  # 不存在 → 404
-        meta: dict[str, Any] = {}
-        try:
-            from tindalos import history as history_mod
-
-            rec = history_mod.get_campaign(campaign_id)
-            if rec is not None:
-                meta = {k: v for k, v in rec.items() if k != "snapshot"}
-        except Exception:  # noqa: BLE001 - 历史库缺失/损坏 → 仅返回内存缓存
-            pass
-        return JSONResponse(content={"campaign": campaign, "meta": meta})
+        rec = history_mod.get_campaign(campaign_id)
+        if rec is None:
+            raise HTTPException(404, 'campaign not found')
+        return JSONResponse(content={"campaign": rec['snapshot'], "meta": {k:v for k,v in rec.items() if k!='snapshot'}})
 
     @app.post("/api/regenerate")
-    async def api_regenerate(body: RegenerateRequest):
+    def api_regenerate(body: RegenerateRequest):
+        from tindalos import history as history_mod
         from tindalos.models import Campaign, construct_loose_campaign
 
         raw = _load_campaign_for_regenerate(body.campaign_id)
+        base = history_mod.get_campaign(body.campaign_id)
+        expected = body.expected_revision or base["revision"]
+        if expected != base["revision"]:
+            raise HTTPException(409,"campaign revision changed")
         try:
             campaign = Campaign.model_validate(raw)
         except Exception:  # noqa: BLE001 - 容错输入（与 cli 同哲学）
@@ -418,25 +441,63 @@ def create_app() -> FastAPI:
                 campaign,
                 body.node_id,
                 generator,
-                db_path=_data_dir() / "store" / "memory_entries.sqlite",
+                db_path=None,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         doc_out = updated.model_dump(mode="json") if hasattr(updated, "model_dump") else updated
-        with _state.lock:
-            _state.campaigns[body.campaign_id] = doc_out
+        if not applied:
+            raise HTTPException(502, 'regeneration failed validation; the saved campaign is unchanged')
         try:
-            from tindalos import history as history_mod
-
             history_mod.register_campaign(
                 body.campaign_id,
                 str(doc_out.get("title", "")),
                 _validate_rules(str(doc_out.get("rules", "COC7"))),
                 doc_out,
+                expected_revision=expected, reason=f"regenerate:{body.node_id}",
             )
-        except Exception:  # noqa: BLE001 - 持久化失败不回滚重生成
-            pass
-        return {"ok": True, "campaign": doc_out, "applied": list(applied or [])}
+        except history_mod.RevisionConflict as exc:
+            raise HTTPException(409,str(exc))
+        rec = history_mod.get_campaign(body.campaign_id)
+        from tindalos.regenerate import _apply_memory_hook, _classify_node, _strip_kind_prefix
+        nid = _strip_kind_prefix(body.node_id)
+        _apply_memory_hook(updated, nid, _classify_node(updated, nid), _data_dir() / 'store' / 'memory_entries.sqlite')
+        return {"ok": True, "campaign": doc_out, "revision":rec["revision"], "applied": list(applied or [])}
+
+    @app.patch("/api/campaigns/{campaign_id}/nodes/{node_id}")
+    def api_edit_node(campaign_id: str, node_id: str, body: EditNodeRequest):
+        try:
+            rec = workspace.save_node(campaign_id,node_id,body.patch,body.expected_revision)
+        except history_mod.RevisionConflict as exc:
+            raise HTTPException(409,str(exc))
+        except LookupError as exc:
+            raise HTTPException(404,str(exc))
+        except ValueError as exc:
+            raise HTTPException(422,str(exc))
+        return {"ok":True,"campaign":rec["snapshot"],"revision":rec["revision"]}
+
+    @app.get("/api/campaigns/{campaign_id}/revisions")
+    def api_revisions(campaign_id: str):
+        return {"revisions":history_mod.list_revisions(campaign_id)}
+
+    @app.post("/api/campaigns/{campaign_id}/restore/{revision}")
+    def api_restore(campaign_id: str, revision: int, body: dict):
+        snapshot = history_mod.get_revision(campaign_id,revision)
+        if not snapshot:
+            raise HTTPException(404,"revision not found")
+        if not isinstance(body.get("expected_revision"),int):
+            raise HTTPException(422,"expected_revision required")
+        try:
+            rec = history_mod.register_campaign(campaign_id,snapshot["title"],snapshot.get("rules","COC7"),snapshot,
+                expected_revision=body["expected_revision"],reason=f"restore:{revision}")
+        except history_mod.RevisionConflict as exc:
+            raise HTTPException(409,str(exc))
+        return {"campaign":rec["snapshot"],"revision":rec["revision"]}
+
+    @app.get("/api/campaigns/{campaign_id}/state")
+    def api_current_state(campaign_id: str, audience: str = "kp"):
+        from tindalos import memory_entries as me
+        return {"facts":me.current_facts(campaign_id,_data_dir()/"store"/"memory_entries.sqlite",audience=audience)}
 
     # ---------------------------------------------------------- 模组上传 + 解析
 
@@ -445,7 +506,12 @@ def create_app() -> FastAPI:
     async def api_upload(file: UploadFile = File(...), rules: str = Form("COC7")):
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="仅支持 PDF 上传")
-        data = await file.read()
+        data = bytearray()
+        while chunk := await file.read(1024 * 1024):
+            data.extend(chunk)
+            if len(data) > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, "文件过大（上限 128MB）")
+        data = bytes(data)
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="文件过大（上限 128MB）")
         if not data:
@@ -469,7 +535,7 @@ def create_app() -> FastAPI:
         pdf_path.write_bytes(data)
 
         try:
-            info = pdfio.analyze_pdf(pdf_path, out_dir=images_dir)
+            info = await asyncio.to_thread(pdfio.analyze_pdf, pdf_path, out_dir=images_dir)
         except Exception as e:  # noqa: BLE001 - 解析失败清理并报 422
             try:
                 pdf_path.unlink(missing_ok=True)
@@ -497,13 +563,13 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=201, content={"module": _module_payload(row, detail=True)})
 
     @app.get("/api/modules")
-    async def api_modules():
+    def api_modules():
         from tindalos import history as history_mod
 
         return {"modules": [_module_payload(r) for r in history_mod.list_modules()]}
 
     @app.get("/api/modules/history")
-    async def api_modules_history():
+    def api_modules_history():
         """site 层历史页数据源（与 /api/history/modules 同源）。
 
         必须注册在 /api/modules/{module_id} 之前——否则 "history" 会被参数路由吞掉，
@@ -514,7 +580,7 @@ def create_app() -> FastAPI:
         return {"modules": [_module_payload(r) for r in history_mod.list_modules()]}
 
     @app.get("/api/modules/{module_id}")
-    async def api_module(module_id: str):
+    def api_module(module_id: str):
         from tindalos import history as history_mod
 
         row = history_mod.get_module(module_id)
@@ -524,7 +590,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/modules/{module_id}/images")
     @app.post("/api/modules/{module_id}/confirm-image")
-    async def api_confirm_image(module_id: str, body: ConfirmImageRequest):
+    def api_confirm_image(module_id: str, body: ConfirmImageRequest):
         from tindalos import history as history_mod
 
         row = history_mod.get_module(module_id)
@@ -579,15 +645,15 @@ def create_app() -> FastAPI:
         return {"indexed": True, "chunks": chunks}
 
     @app.post("/api/rag/ingest")
-    async def api_rag_ingest(body: IngestRequest):
+    def api_rag_ingest(body: IngestRequest):
         return _ingest_module(body.module_id)
 
     @app.post("/api/modules/{module_id}/ingest")
-    async def api_module_ingest(module_id: str):
+    def api_module_ingest(module_id: str):
         return _ingest_module(module_id)
 
     @app.post("/api/rag/search")
-    async def api_rag_search(body: SearchRequest):
+    def api_rag_search(body: SearchRequest):
         from tindalos import rag
 
         query = body.query.strip()
@@ -598,7 +664,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/rag/qa")
     @app.post("/api/qa")
-    async def api_rag_qa(body: QaRequest):
+    def api_rag_qa(body: QaRequest):
         from tindalos import rag
 
         question = body.question.strip()
@@ -609,19 +675,19 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------- 历史记录
 
     @app.get("/api/history/modules")
-    async def api_history_modules():
+    def api_history_modules():
         from tindalos import history as history_mod
 
         return {"modules": [_module_payload(r) for r in history_mod.list_modules()]}
 
     @app.get("/api/history/campaigns")
-    async def api_history_campaigns():
+    def api_history_campaigns():
         from tindalos import history as history_mod
 
         return {"campaigns": history_mod.list_campaigns()}
 
     @app.get("/api/history/campaigns/{campaign_id}")
-    async def api_history_campaign(campaign_id: str):
+    def api_history_campaign(campaign_id: str):
         from tindalos import history as history_mod
 
         rec = history_mod.get_campaign(campaign_id)
@@ -630,7 +696,7 @@ def create_app() -> FastAPI:
         return {"campaign": rec["snapshot"], "meta": {k: v for k, v in rec.items() if k != "snapshot"}}
 
     @app.delete("/api/history/campaigns/{campaign_id}")
-    async def api_history_delete(campaign_id: str):
+    def api_history_delete(campaign_id: str):
         from fastapi import Response
 
         from tindalos import history as history_mod
@@ -645,13 +711,13 @@ def create_app() -> FastAPI:
         return _data_dir() / "store" / "eval.sqlite"
 
     @app.get("/api/eval/runs")
-    async def api_eval_runs(limit: int = 20, campaign_id: str | None = None):
+    def api_eval_runs(limit: int = 20, campaign_id: str | None = None):
         from tindalos import eval_store
 
         return {"runs": eval_store.list_runs(limit=limit, campaign_id=campaign_id, db_path=_eval_db_path())}
 
     @app.get("/api/eval/runs/{run_id}")
-    async def api_eval_run_detail(run_id: str):
+    def api_eval_run_detail(run_id: str):
         from tindalos import eval_store
 
         run = eval_store.get_run(run_id, db_path=_eval_db_path())
@@ -660,7 +726,7 @@ def create_app() -> FastAPI:
         return {"run": run, "annotations": eval_store.list_annotations(run_id, db_path=_eval_db_path())}
 
     @app.post("/api/eval/run")
-    async def api_eval_run(body: EvalRunRequest):
+    def api_eval_run(body: EvalRunRequest):
         from tindalos import eval_store, history as history_mod
         from tindalos.eval_.runner import run_eval
 
@@ -676,16 +742,35 @@ def create_app() -> FastAPI:
         # history 快照是 dict——runner 内 _ensure_campaign_model 会归一化供属性访问
         trace = run_eval(
             rec["snapshot"],
-            module_id=body.module_id,
+            module_id=body.module_id or rec["module_id"],
             max_usd=body.max_usd,
             db_path=_eval_db_path(),
+            params={"revision":rec["revision"]},
         )
+        trace["params"]["revision"] = rec["revision"]
         return {"trace": trace}
+
+    @app.post("/api/eval/runs/{run_id}/reviews", status_code=201)
+    def api_human_review(run_id: str, body: HumanReviewRequest):
+        from tindalos import eval_store
+        run = eval_store.get_run(run_id, db_path=_eval_db_path())
+        if not run:
+            raise HTTPException(404, "eval run not found")
+        if run.get("params", {}).get("revision") != body.revision:
+            raise HTTPException(409, "review must refer to the evaluated revision")
+        # A later human observation is append-only. It never rewrites the
+        # completed automatic verdict or claims an independent blind review.
+        eval_store.append_annotations(run_id, [{"layer":"L5",
+            "subject_ref":f"campaign:{run['campaign_id']}:revision:{body.revision}",
+            "score":1.0 if body.usable else 0.0, "explanation":body.notes,
+            "evidence_refs":[{"revision":body.revision,"origin":"local_kp_review"}]}],
+            db_path=_eval_db_path())
+        return {"ok":True,"review_saved":True,"automatic_verdict":run["verdict"]}
 
     # ---------------------------------------------------------- 记忆（P1 记忆核心）
 
     @app.get("/api/memories/{campaign_id}")
-    async def api_memories(campaign_id: str):
+    def api_memories(campaign_id: str):
         """四类记忆 + 最近游玩状态（设计文档 §4.5 / P1 ticket 01）。
 
         campaign 无记忆时返回空四类与 play_status=None，不 404（记忆是增强层，
@@ -714,6 +799,7 @@ def create_app() -> FastAPI:
                         "source_episode": r["source_episode"],
                         "ref_ids": refs,
                         "status": r["status"],
+                        "origin":r.get("origin","planned"),
                         "created_at": r["created_at"],
                     }
                 )
@@ -729,7 +815,7 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------- 游玩会话（P2 回叙采集）
 
     @app.post("/api/sessions/{campaign_id}")
-    async def api_record_session(campaign_id: str, body: RecordSessionRequest):
+    def api_record_session(campaign_id: str, body: RecordSessionRequest):
         """KP 回叙 → 记一场游玩会话 + 轻量整合（设计文档 §3.3 P2 / ticket 01）。
 
         summary 必填非空（空 → 400）；db_path 与 /api/memories 同款
@@ -741,14 +827,16 @@ def create_app() -> FastAPI:
         summary = body.summary.strip()
         if not summary:
             raise HTTPException(status_code=400, detail="summary 必填非空字符串")
+        for fact in body.facts:
+            if not fact.get("subject_key") or not fact.get("content"):
+                raise HTTPException(422,"事实需要 subject_key 和 content")
         db = _data_dir() / "store" / "memory_entries.sqlite"
-        result = me.record_session(
-            campaign_id,
-            summary,
-            db_path=db,
-            play_status=body.play_status,
-            conflicts=body.conflicts,
-        )
+        try:
+            result = me.record_session(campaign_id, summary, db_path=db,
+                play_status=body.play_status, conflicts=body.conflicts,
+                request_key=body.request_key, facts=body.facts)
+        except me.SessionConflict as exc:
+            raise HTTPException(409, str(exc))
         sessions = me.list_play_sessions(campaign_id, db)
         row = next((s for s in sessions if s["id"] == result["session_id"]), None)
         if row is not None:
@@ -766,7 +854,7 @@ def create_app() -> FastAPI:
         return payload
 
     @app.get("/api/sessions/{campaign_id}")
-    async def api_sessions(campaign_id: str):
+    def api_sessions(campaign_id: str):
         """某 campaign 的全部游玩会话 + 最近 play_status（设计文档 §3.3 P2 / ticket 01）。
 
         无会话时返回空列表与 current_play_status=None，不 404（与 /api/memories 同哲学）。
@@ -804,7 +892,9 @@ def create_app() -> FastAPI:
                 or full_path.startswith("assets/")
             ):
                 raise HTTPException(status_code=404, detail="not found")
-            target = dist / full_path
+            target = (dist / full_path).resolve()
+            if not target.is_relative_to(dist.resolve()):
+                raise HTTPException(404, "not found")
             if target.is_file():
                 return FileResponse(target)
             return FileResponse(dist / "index.html")

@@ -21,6 +21,7 @@ from langgraph.store.memory import InMemoryStore
 from typer.testing import CliRunner
 
 import tindalos.cli as cli_mod
+import tindalos.pipeline as pipeline_mod
 import tindalos.config as config_mod
 from tindalos.cli import app
 from tindalos.generator import DeterministicGenerator
@@ -224,7 +225,7 @@ def test_cli_generate_delegates_to_compose_campaign(monkeypatch):
         captured["npcs"] = npcs
         return {"campaign": sentinel, "clues": [], "relations": [], "world": {}, "notes_md": ""}
 
-    monkeypatch.setattr(cli_mod, "compose_campaign", spy)
+    monkeypatch.setattr(pipeline_mod, "compose_campaign", spy)
     gen = DeterministicGenerator()
     out = cli_mod._generate_campaign(gen, MODULE_TEXT, PREMISE)
     assert out is sentinel, "_generate_campaign 应返回 compose_campaign 的 campaign"

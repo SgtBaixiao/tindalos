@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import pypdfium2 as pdfium
-from pypdfium2 import _helpers as h
+# Use the public helper exports; private _helpers moved in pypdfium2 5.
+h = pdfium
 
 logger = logging.getLogger(__name__)
 

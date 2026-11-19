@@ -1,8 +1,7 @@
 /**
- * site.test.tsx —— SgtXLonelyHeartsClub 站点外壳验收：
+ * site.test.tsx —— Tindalos 站点外壳验收：
  * ① parseHash + api.health
- * ② Loading 时序（逐词升起 → 坠落 → onDone）
- * ③ SiteApp 启动：Loading 展示后自动进入首页
+ * ③ SiteApp 启动：立即显示首页
  * ④ hash 路由导航（#/ → workbench / library / qa / history）
  * ⑤ 规则问答交互（提问 → 回答 + 来源 + 模式徽标）
  * ⑥ 历史记录 + 点击剧本进入重放
@@ -14,8 +13,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act, createElement } from 'react';
 import { parseHash } from '../src/site/router';
 import { health } from '../src/site/api';
-import { Loading, LOADING_MS } from '../src/site/Loading';
 import { SiteApp } from '../src/site/SiteApp';
+import { navigateRoute, settleRoute } from './siteHarness';
 import { ReplayPlayer, buildReplaySteps } from '../src/site/ReplayPlayer';
 import type { Campaign } from '../src/site/types';
 
@@ -131,10 +130,7 @@ function stubMatchMedia(reduced = false): void {
 
 /** 原生 value setter + input 事件（React 受控输入必需）。 */
 function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    'value',
-  )?.set;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
@@ -146,38 +142,16 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
-/** 设置 hash 并派发 hashchange（jsdom 可能已自动派发，重复无害）。 */
 async function go(hash: string): Promise<void> {
-  window.location.hash = hash;
-  await act(async () => {
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-    await new Promise((r) => setTimeout(r, 0));
-  });
-  // 让路由挂载的视图的异步 fetch 完成并重渲染
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
+  await navigateRoute(container, hash);
 }
 
-/**
- * 快速启动：用 fake timers 走完 Loading 全时序（升起→坠落→onDone），
- * 随后切回真实 timers，保证后续路由/异步测试稳定。
- */
 async function bootFast(root: Root, fetchMock: ReturnType<typeof vi.fn>): Promise<void> {
   vi.stubGlobal('fetch', fetchMock);
   stubMatchMedia(false);
-  vi.useFakeTimers();
-  try {
-    act(() => {
-      root.render(createElement(SiteApp));
-    });
-    act(() => {
-      vi.advanceTimersByTime(LOADING_MS.done + 100);
-    });
-  } finally {
-    vi.useRealTimers();
-  }
-  expect(container.querySelector('.sx-loading')).toBeNull();
+  await act(async () => {
+    root.render(createElement(SiteApp));
+  });
   expect(rootContainer()).not.toBeNull();
 }
 
@@ -224,80 +198,15 @@ describe('parseHash + health', () => {
   });
 });
 
-/* ---------------------------------------------------------------- ② Loading 时序 */
-
-describe('Loading', () => {
-  it('逐词升起 → hide 开始坠落 → done 触发 onDone（词含 SgtX…Club）', async () => {
-    stubMatchMedia(false);
-    vi.useFakeTimers();
-    const onDone = vi.fn();
-    try {
-      act(() => {
-        root.render(createElement(Loading, { onDone }));
-      });
-      const el = container.querySelector('.sx-loading')!;
-      expect(el.getAttribute('data-hiding')).toBe('false');
-      expect(container.textContent).toContain('SgtX');
-      expect(container.textContent).toContain('Club');
-
-      act(() => {
-        vi.advanceTimersByTime(LOADING_MS.hide);
-      });
-      expect(el.getAttribute('data-hiding')).toBe('true');
-
-      act(() => {
-        vi.advanceTimersByTime(LOADING_MS.done - LOADING_MS.hide + 50);
-      });
-      expect(onDone).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('reduced-motion：直接触发 onDone', async () => {
-    stubMatchMedia(true);
-    vi.useFakeTimers();
-    const onDone = vi.fn();
-    try {
-      act(() => {
-        root.render(createElement(Loading, { onDone }));
-      });
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(onDone).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
 /* ---------------------------------------------------------------- ③ 启动 */
 
 describe('SiteApp 启动', () => {
-  it('Loading 展示后自动进入首页（含 slogan 与四栏目）', async () => {
-    const fetchMock = siteFetch();
-    vi.stubGlobal('fetch', fetchMock);
-    stubMatchMedia(false);
-    vi.useFakeTimers();
-    try {
-      act(() => {
-        root.render(createElement(SiteApp));
-      });
-      expect(container.querySelector('.sx-loading')).toBeTruthy();
-
-      act(() => {
-        vi.advanceTimersByTime(LOADING_MS.done + 100);
-      });
-      expect(container.querySelector('.sx-loading')).toBeNull();
-      expect(container.querySelector('[data-testid="sx-home"]')).toBeTruthy();
-      expect(container.textContent).toContain('随时可访问的 TRPG 备团工作台');
-      expect(container.textContent).toContain('剧本工作台');
-      expect(container.textContent).toContain('模组资料库');
-      expect(container.textContent).toContain('规则问答');
-      expect(container.textContent).toContain('历史记录');
-    } finally {
-      vi.useRealTimers();
+  it('立即显示首页与六个栏目，不等待启动动画', async () => {
+    await bootFast(root, siteFetch());
+    expect(container.querySelector('.sx-loading')).toBeNull();
+    expect(container.textContent).toContain('未知有边界');
+    for (const title of ['剧本工作台', '模组资料库', '规则问答', '历史记录', '评测', '记忆']) {
+      expect(container.textContent).toContain(title);
     }
   });
 });
@@ -310,19 +219,23 @@ describe('hash 路由导航', () => {
     await bootFast(root, fetchMock);
 
     await go('#/workbench');
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('workbench');
     expect(container.textContent).toContain('生成');
     expect(container.querySelector('[data-testid="mock-app"]')).toBeTruthy();
 
     await go('#/library');
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('library');
     expect(container.textContent).toContain('已入库模组');
 
     await go('#/qa');
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('qa');
     expect(container.textContent).toContain('发送');
 
     await go('#/history');
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('history');
     expect(container.textContent).toContain('生成的剧本');
   });
@@ -334,6 +247,7 @@ describe('hash 路由导航', () => {
       findButton(container, '模组资料库').click();
       await new Promise((r) => setTimeout(r, 0));
     });
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('library');
   });
 });
@@ -371,9 +285,7 @@ describe('规则问答', () => {
 describe('历史记录 → 重放', () => {
   it('两组卡片渲染，点击剧本进入重放页', async () => {
     const fetchMock = siteFetch({
-      campaigns: [
-        { id: 'c1', title: '雾港之夜', created_at: '2026-08-16', acts_count: 1 },
-      ],
+      campaigns: [{ id: 'c1', title: '雾港之夜', created_at: '2026-08-16', acts_count: 1 }],
       modulesHistory: [{ id: 'm1', title: '克苏鲁的呼唤', filename: 'coc7.pdf' }],
       campaign: replayCampaign,
     });
@@ -396,6 +308,7 @@ describe('历史记录 → 重放', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('replay');
     expect(container.textContent).toContain('剧本重放');
     expect(container.querySelector('[data-testid="sx-replay-player"]')).toBeTruthy();

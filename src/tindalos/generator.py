@@ -122,6 +122,8 @@ class DeterministicGenerator:
                     "personality": rng.sample(_TRAITS, k=2),
                     "description": f"{name}是{archetype}，与「{_clip(premise)}」的传闻有所牵连。",
                     "acts_roles": {},
+                    "goals": ["保护自身安全并判断调查员是否可信"],
+                    "knowledge": [], "resources": [],
                 }
             )
         return npcs
@@ -242,6 +244,7 @@ class OllamaGenerator:
         self._transport = transport
         self._client: LLMClient | None = None  # 惰性构建：settings 可能被外部重新赋值
         self._fallback = DeterministicGenerator()
+        self.fallback_reasons: list[str] = []
         self._module_context = ""
         self._module_title = ""
         # 模组图像视觉识别参考（spec §四.3）：kind/name/caption 注入生成上下文；空列表不注入。
@@ -372,6 +375,7 @@ class OllamaGenerator:
 
     # -- 失败告警 + 草案规整 --------------------------------------
     def _warn_fallback(self, what: str) -> None:
+        self.fallback_reasons.append(what)
         warnings.warn(
             f"OllamaGenerator 生成失败（{what}），回退 DeterministicGenerator",
             UserWarning,
@@ -453,6 +457,9 @@ class OllamaGenerator:
                 if isinstance(pers, list)
                 else ([str(pers)] if pers else [])
             )
+            for field in ("goals", "knowledge", "resources"):
+                value = it.get(field)
+                it[field] = [str(v) for v in value if str(v).strip()] if isinstance(value,list) else ([str(value)] if value else [])
             roles = it.get("acts_roles")
             it["acts_roles"] = (
                 {str(k): str(v) for k, v in roles.items() if isinstance(v, (str, int))}
@@ -501,7 +508,7 @@ class OllamaGenerator:
         return acts[:n_acts]
 
     def generate_npcs(self, premise: str, n: int) -> list[dict[str, Any]]:
-        prompt = f"你是 NPC 生成器。根据前提生成 {n} 个 NPC，输出 JSON 数组：每项含 id/name/archetype/personality(数组)/description/acts_roles。\n前提：{premise}"
+        prompt = f"你是 NPC 生成器。根据前提生成 {n} 个 NPC，输出 JSON 数组：每项含 id/name/archetype/personality(数组)/description/acts_roles/goals(目标数组)/knowledge(已知信息数组)/resources(资源数组)。知识只能来自给定模组；未知信息用空数组。\n前提：{premise}"
         doc, exc = self._generate(prompt)
         items = doc if isinstance(doc, list) else (doc.get("npcs", []) if isinstance(doc, dict) else [])
         npcs = self._norm_npcs(items)
@@ -514,7 +521,7 @@ class OllamaGenerator:
     def generate_scene(self, act_title: str, premise: str, npc_ids: list[str]) -> dict[str, Any]:
         prompt = (
             f"为「{act_title}」生成一个场景：调用 generate_scene 工具，npc_ids={list(npc_ids)}，"
-            f"事件序列须为 entry→trigger→outcome。\n前提：{premise}"
+            f"提供玩家可调查的场景，事件关系仅连接有因果或触发依据的事件。线索应有可取得的证据和可推出的具体结论；失败不能仅封死关键进展。仅给出模组支持的 NPC 信息；创作补充写明待 KP 审阅。\n前提：{premise}"
         )
         doc, exc = self._generate(prompt, tools=[_SCENE_TOOL])
         norm = self._norm_scene(doc)

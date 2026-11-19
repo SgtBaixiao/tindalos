@@ -51,7 +51,10 @@ describe('buildScriptGraph — 五类节点映射', () => {
 
   it('五类节点齐全（act/scene/event/npc/clue 均存在）', () => {
     for (const t of ['act', 'scene', 'event', 'npc', 'clue'] as const) {
-      expect(nodes.some((n) => n.type === t), `缺少 ${t} 节点`).toBe(true);
+      expect(
+        nodes.some((n) => n.type === t),
+        `缺少 ${t} 节点`,
+      ).toBe(true);
     }
   });
 

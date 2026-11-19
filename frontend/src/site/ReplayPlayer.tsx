@@ -91,9 +91,7 @@ export function ReplayPlayer({ campaign }: ReplayPlayerProps) {
         </span>
         <h2 className="sx-replay-player__title">{step.title}</h2>
       </div>
-      <p className="sx-replay-player__desc">
-        {step.description || '（无描述）'}
-      </p>
+      <p className="sx-replay-player__desc">{step.description || '（无描述）'}</p>
       {step.kind === 'event' && step.conditions.length > 0 && (
         <ul className="sx-replay-player__conditions">
           {step.conditions.map((c, i) => (
@@ -141,11 +139,7 @@ export function ReplayPlayer({ campaign }: ReplayPlayerProps) {
         >
           上一步
         </button>
-        <button
-          type="button"
-          className="sx-btn sx-btn--ink"
-          onClick={() => setPlaying((p) => !p)}
-        >
+        <button type="button" className="sx-btn sx-btn--ink" onClick={() => setPlaying((p) => !p)}>
           {playing ? '暂停' : '播放'}
         </button>
         <button

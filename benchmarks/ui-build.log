@@ -1,0 +1,36 @@
+
+> tindalos-frontend@0.1.0 build
+> tsc && vite build
+
+vite v8.2.1 building client environment for production...
+[2Ktransforming...✓ 230 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                           0.63 kB │ gzip:  0.45 kB
+dist/.vite/manifest.json                  4.29 kB │ gzip:  0.76 kB
+dist/assets/HistoryView-B2eQumGy.css      0.21 kB │ gzip:  0.17 kB
+dist/assets/cards-DFGN54Wd.css            0.75 kB │ gzip:  0.42 kB
+dist/assets/ReplayView-BOLAxMHl.css       1.81 kB │ gzip:  0.65 kB
+dist/assets/QaView-5h_-u874.css           2.11 kB │ gzip:  0.77 kB
+dist/assets/MemoryView-BDbC-vJz.css       4.10 kB │ gzip:  1.03 kB
+dist/assets/LibraryView-B0Jopwh6.css      4.12 kB │ gzip:  1.28 kB
+dist/assets/evalFormat-D1AFCmJF.css       7.08 kB │ gzip:  1.57 kB
+dist/assets/index-CKxD7ohl.css           13.50 kB │ gzip:  3.79 kB
+dist/assets/WorkbenchView-CWuI89DT.css   30.61 kB │ gzip:  5.72 kB
+dist/assets/format-CmUHtWOd.js            0.23 kB │ gzip:  0.18 kB
+dist/assets/types-HbQhxKkQ.js             0.29 kB │ gzip:  0.22 kB
+dist/assets/PageHeader-CkXWMKDQ.js        0.29 kB │ gzip:  0.20 kB
+dist/assets/workspace-Dmd2phfl.js         1.05 kB │ gzip:  0.58 kB
+dist/assets/api-xAS7xI4k.js               1.25 kB │ gzip:  0.43 kB
+dist/assets/evalFormat-Diq2kDya.js        1.27 kB │ gzip:  0.79 kB
+dist/assets/EvalView-Dhr8Zkfw.js          1.98 kB │ gzip:  1.01 kB
+dist/assets/HistoryView-ByMVpTTN.js       2.17 kB │ gzip:  0.94 kB
+dist/assets/QaView-CMbvmrLN.js            2.50 kB │ gzip:  1.33 kB
+dist/assets/ReplayView-DemnQPja.js        3.49 kB │ gzip:  1.44 kB
+dist/assets/LibraryView-3bEeRy8y.js       5.68 kB │ gzip:  2.11 kB
+dist/assets/MemoryView-avsCX5zz.js        7.81 kB │ gzip:  2.52 kB
+dist/assets/EvalDetailView-BTMqnTsx.js    9.85 kB │ gzip:  3.00 kB
+dist/assets/index-DKtfWSxM.js           203.85 kB │ gzip: 65.09 kB
+dist/assets/WorkbenchView-DeUfUhUp.js   258.94 kB │ gzip: 83.89 kB
+
+✓ built in 107ms

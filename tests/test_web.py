@@ -156,6 +156,7 @@ def test_generate_sse_and_persist(client, monkeypatch):
     assert r.headers["content-type"].startswith("text/event-stream")
 
     frames = _sse_data(r.content)
+    assert frames.pop(0)["stage"] == "queued"
     assert frames[0]["stage"] == "plan"
     assert frames[0]["message"] == "读取模组"
     assert frames[1]["stage"] == "write"

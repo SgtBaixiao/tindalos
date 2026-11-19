@@ -68,6 +68,8 @@ export type CampaignView = {
   id: string;
   title: string;
   premise?: string;
+  rules?: string;
+  generation?: { mode?: string; degraded?: boolean; fallback_reasons?: string[] };
   acts: ActView[];
   npcs: Record<string, NpcView>;
   clues: ClueView[];
@@ -103,6 +105,9 @@ export type EventView = {
 export type NpcView = {
   id: string;
   name: string;
+  goals?: string[];
+  knowledge?: string[];
+  resources?: string[];
   archetype?: string;
   personality?: string[];
   description?: string;
@@ -112,6 +117,11 @@ export type ClueView = {
   id: string;
   name: string;
   description?: string;
+  conclusions?: string[];
+  acquisition_conditions?: string[];
+  alternatives?: string[];
+  source_refs?: string[];
+  origin?: string;
   linked_npc_ids?: string[];
   linked_event_ids?: string[];
 };

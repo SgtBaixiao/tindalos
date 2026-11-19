@@ -17,7 +17,7 @@ import json
 import os
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # update_module 可更新的白名单字段（其余入参一律忽略）
@@ -43,8 +43,10 @@ def db_path() -> Path:
 
 def _connect() -> sqlite3.Connection:
     """新建一条到 site.db 的连接（row_factory=Row）；调用方负责 with/closing 关闭。"""
-    conn = sqlite3.connect(db_path())
+    conn = sqlite3.connect(db_path(), timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -72,6 +74,8 @@ def _campaign_row_to_dict(row: sqlite3.Row) -> dict:
         "event_count": row["event_count"],
         "size": row["size"],
         "snapshot": json.loads(snapshot) if snapshot else None,
+        "revision": row["revision"],
+        "module_id": row["module_id"],
     }
 
 
@@ -80,6 +84,7 @@ def init_db() -> None:
     db = db_path()
     db.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(db)) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS modules (
@@ -108,6 +113,21 @@ def init_db() -> None:
             )
             """
         )
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(campaigns)")}
+        if "revision" not in columns:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+        if "module_id" not in columns:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN module_id TEXT")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS campaign_revisions (
+                campaign_id TEXT NOT NULL, revision INTEGER NOT NULL,
+                snapshot_json TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
+                PRIMARY KEY(campaign_id, revision)
+            );
+            CREATE INDEX IF NOT EXISTS idx_campaign_created ON campaigns(created_at DESC);
+            INSERT OR IGNORE INTO campaign_revisions
+                SELECT id, revision, snapshot_json, 'legacy_import', created_at FROM campaigns;
+        """)
         conn.commit()
 
 
@@ -209,7 +229,39 @@ def update_module(module_id, **fields) -> dict | None:
         return _row_to_dict(row)
 
 
-def register_campaign(campaign_id, title, rules, campaign_dict) -> dict:
+class RevisionConflict(ValueError):
+    """An editor wrote against a revision that is no longer current."""
+
+
+def _write_campaign(conn, campaign_id, title, rules, campaign_dict, *, expected_revision=None,
+                    module_id=None, reason="generated") -> dict:
+    old = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+    actual = old["revision"] if old else 0
+    if expected_revision is not None and expected_revision != actual:
+        raise RevisionConflict(f"revision conflict: expected {expected_revision}, current {actual}")
+    revision = actual + 1
+    module_id = module_id or (old["module_id"] if old else None)
+    if hasattr(campaign_dict, "model_dump"):
+        campaign_dict = campaign_dict.model_dump(mode="json")
+    snapshot = json.dumps(campaign_dict, ensure_ascii=False)
+    now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    event_count = sum(len(s.get("events") or []) for a in campaign_dict.get("acts", [])
+                      for s in a.get("scenes", []))
+    conn.execute("""INSERT INTO campaigns
+        (id,title,rules,created_at,event_count,size,snapshot_json,revision,module_id)
+        VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+        title=excluded.title, rules=excluded.rules, event_count=excluded.event_count,
+        size=excluded.size, snapshot_json=excluded.snapshot_json,
+        revision=excluded.revision, module_id=excluded.module_id""",
+        (campaign_id,title,rules,old["created_at"] if old else now,event_count,
+         len(snapshot.encode("utf-8")),snapshot,revision,module_id))
+    conn.execute("INSERT INTO campaign_revisions VALUES (?,?,?,?,?)",
+                 (campaign_id,revision,snapshot,reason,now))
+    return _campaign_row_to_dict(conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone())
+
+
+def register_campaign(campaign_id, title, rules, campaign_dict, *, expected_revision=None,
+                      module_id=None, reason="generated") -> dict:
     """持久化一份生成剧本；返回 {id,title,rules,created_at,event_count,size,snapshot}。
 
     event_count = 全部场景事件总数（跨所有 acts/scenes 的 events 长度和）；
@@ -217,30 +269,31 @@ def register_campaign(campaign_id, title, rules, campaign_dict) -> dict:
     （ensure_ascii=False）。campaign_dict 可为 dict 或 pydantic Campaign
     （自动 model_dump）。同一 id 再次注册为覆盖式更新（INSERT OR REPLACE）。
     """
-    if hasattr(campaign_dict, "model_dump"):
-        campaign_dict = campaign_dict.model_dump()
-    event_count = sum(
-        len(scene.get("events") or [])
-        for act in campaign_dict.get("acts", []) or []
-        for scene in act.get("scenes", []) or []
-    )
-    snapshot = json.dumps(campaign_dict, ensure_ascii=False)
-    size = len(snapshot.encode("utf-8"))
-    now = datetime.now().isoformat(timespec="seconds")
     with closing(_connect()) as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO campaigns
-                (id, title, rules, created_at, event_count, size, snapshot_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (campaign_id, title, rules, now, event_count, size, snapshot),
-        )
+        conn.execute("BEGIN IMMEDIATE")
+        result = _write_campaign(conn, campaign_id, title, rules, campaign_dict,
+                                 expected_revision=expected_revision, module_id=module_id, reason=reason)
         conn.commit()
-        row = conn.execute(
-            "SELECT * FROM campaigns WHERE id = ?", (campaign_id,)
-        ).fetchone()
-    return _campaign_row_to_dict(row)
+    return result
+
+
+def list_revisions(campaign_id) -> list[dict]:
+    with closing(_connect()) as conn:
+        return [dict(r) for r in conn.execute("""SELECT revision,reason,created_at
+            FROM campaign_revisions WHERE campaign_id=? ORDER BY revision DESC""", (campaign_id,))]
+
+
+def get_revision(campaign_id, revision) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT snapshot_json FROM campaign_revisions WHERE campaign_id=? AND revision=?",
+                           (campaign_id,revision)).fetchone()
+        return json.loads(row[0]) if row else None
+
+
+def find_module_by_hash(digest) -> dict | None:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT * FROM modules WHERE sha256=?", (digest,)).fetchone()
+        return _row_to_dict(row) if row else None
 
 
 def get_campaign(campaign_id) -> dict | None:
@@ -263,7 +316,7 @@ def list_campaigns() -> list[dict]:
     with closing(_connect()) as conn:
         rows = conn.execute(
             """
-            SELECT id, title, rules, created_at, event_count, size
+            SELECT id, title, rules, created_at, event_count, size, revision, module_id
             FROM campaigns ORDER BY created_at DESC
             """
         ).fetchall()
@@ -273,6 +326,7 @@ def list_campaigns() -> list[dict]:
 def delete_campaign(campaign_id) -> bool:
     """删除剧本；删除成功返回 True，不存在返回 False。"""
     with closing(_connect()) as conn:
+        conn.execute("DELETE FROM campaign_revisions WHERE campaign_id=?", (campaign_id,))
         cur = conn.execute("DELETE FROM campaigns WHERE id = ?", (campaign_id,))
         conn.commit()
         return cur.rowcount > 0

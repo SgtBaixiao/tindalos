@@ -1,0 +1,15 @@
+{
+  "stage": "before-ui-refactor",
+  "files": [
+    {
+      "file": "index-DPNXQagV.js",
+      "bytes": 485742,
+      "gzip_bytes": 150133
+    },
+    {
+      "file": "index-DwC2GnHE.css",
+      "bytes": 60785,
+      "gzip_bytes": 11063
+    }
+  ]
+}

@@ -191,7 +191,7 @@ def _run_all_checks(model: Optional[Campaign], schema_err: str, world: Any) -> l
     scenes = [s for a in model.acts for s in a.scenes]
     if scenes:
         avg = sum(len(s.events) for s in scenes) / len(scenes)
-        emit("event_density", avg >= 2, f"平均每场景事件数 {avg:.1f} < 2")
+        emit("event_density", avg >= 2, f"平均每场景事件数 {avg:.1f} < 2" if avg < 2 else "")
     else:
         emit("event_density", False, "没有任何场景，事件密度不可计算")
 
@@ -212,7 +212,7 @@ def _run_all_checks(model: Optional[Campaign], schema_err: str, world: Any) -> l
     emit("clue_described", not plain_clues, "；".join(plain_clues))
 
     n_rel = len(model.relations)
-    emit("relation_richness", n_rel >= 2, f"世界知识图谱关系数 {n_rel} < 2")
+    emit("relation_richness", n_rel >= 2, f"世界知识图谱关系数 {n_rel} < 2" if n_rel < 2 else "")
 
     # —— 可玩性 ——
     empty_events = [
@@ -224,7 +224,7 @@ def _run_all_checks(model: Optional[Campaign], schema_err: str, world: Any) -> l
     has_branch = any(
         len(e.next_event_ids) >= 2 for a in model.acts for s in a.scenes for e in s.events
     )
-    emit("branching", has_branch, "没有任何事件存在 ≥2 条后续分支（next_event_ids）")
+    emit("branching", has_branch, "" if has_branch else "没有任何事件存在 ≥2 条后续分支（next_event_ids）")
 
     return results
 

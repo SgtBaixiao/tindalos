@@ -133,6 +133,7 @@ def regenerate_scene_events(
     draft = generator.generate_scene(salt, campaign.premise, list(scene.npc_ids))
     events: list[Event] = []
     new_ids: set[str] = set()
+    id_map: dict[str, str] = {}
     for j, ev in enumerate(draft.get("events", []) or []):
         data = dict(ev)
         base = f"{scene.id}-ev-{j + 1}"
@@ -142,9 +143,10 @@ def regenerate_scene_events(
             eid = f"{base}-r{counter}"
         new_ids.add(eid)
         data["id"] = eid
+        id_map[ev.get("id", "")] = eid
         events.append(Event(**data))
-    for j, ev in enumerate(events):
-        ev.next_event_ids = [events[k].id for k in range(j + 1, len(events))]
+    for ev in events:
+        ev.next_event_ids = [id_map[n] for n in ev.next_event_ids if n in id_map]
     scene.events = events
     used_ids.update(new_ids)
     return len(events)
@@ -311,6 +313,8 @@ def _related_memory_rows(
     related: list[dict] = []
     for mt in ("semantic", "longterm"):
         for row in me.list_entries(campaign_id, mt, db_path, status="active"):
+            if row.get('origin') == 'session':
+                continue
             if subject_keys and row.get("subject_key") in subject_keys:
                 related.append(row)
             elif _entry_refers_node(row, node_id, episodic_id):

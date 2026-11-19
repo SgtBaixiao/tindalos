@@ -1,3 +1,4 @@
+import './styles/library.css';
 /**
  * site/LibraryView.tsx —— 模组资料库：上传规则书 PDF → 入库 + 建立 RAG 索引；
  * 已入库模组列表 → 点开右侧抽屉（桌面 1/3 面板 / 移动 90dvh 底部面板）：
@@ -5,13 +6,7 @@
  */
 
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
-import {
-  confirmImage,
-  getModule,
-  ingestModule,
-  listModules,
-  uploadModule,
-} from './api';
+import { confirmImage, getModule, ingestModule, listModules, uploadModule } from './api';
 import {
   VISION_KIND_LABELS,
   VISION_KINDS,
@@ -21,6 +16,7 @@ import {
   type VisionResult,
 } from './types';
 import { sxVars } from './css';
+import { PageHeader } from '../ui/PageHeader';
 
 type ConfirmControlProps = {
   moduleId: string;
@@ -120,15 +116,9 @@ function Gallery({ moduleId, images, onConfirmed }: GalleryProps) {
             loading="lazy"
           />
           <div className="sx-gallery__meta">
-            <span className={`sx-badge sx-badge--${img.kind}`}>
-              {VISION_KIND_LABELS[img.kind]}
-            </span>
-            <span className="sx-gallery__conf">
-              {Math.round(img.confidence * 100)}%
-            </span>
-            {img.needs_confirmation && (
-              <span className="sx-gallery__flag">待确认</span>
-            )}
+            <span className={`sx-badge sx-badge--${img.kind}`}>{VISION_KIND_LABELS[img.kind]}</span>
+            <span className="sx-gallery__conf">{Math.round(img.confidence * 100)}%</span>
+            {img.needs_confirmation && <span className="sx-gallery__flag">待确认</span>}
           </div>
           {img.name && <p className="sx-gallery__name">{img.name}</p>}
           {img.caption && <p className="sx-gallery__caption">{img.caption}</p>}
@@ -204,9 +194,7 @@ export function LibraryView() {
     setDetailError(null);
     try {
       const res = await ingestModule(detailId);
-      setDetailError(
-        res.indexed ? `已建立索引（${res.chunks} 块）` : '索引未建立',
-      );
+      setDetailError(res.indexed ? `已建立索引（${res.chunks} 块）` : '索引未建立');
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -216,6 +204,11 @@ export function LibraryView() {
 
   return (
     <section className="sx-library" data-testid="sx-library">
+      <PageHeader
+        eyebrow="02 / SOURCE MATERIAL"
+        title="模组资料库"
+        description="保留原始正文和图像，让每次准备都能回到出处。"
+      />
       <div className="sx-library__upload">
         <label className="sx-upload">
           <input
@@ -274,10 +267,7 @@ export function LibraryView() {
             <>
               <div className="sx-detail__text">
                 <h4>文本预览</h4>
-                <p>
-                  {detail.text_preview ||
-                    '（无文本预览；可在资料库列表中重新入库生成索引）'}
-                </p>
+                <p>{detail.text_preview || '（无文本预览；可在资料库列表中重新入库生成索引）'}</p>
               </div>
               <div className="sx-detail__actions" style={sxVars({})}>
                 <button

@@ -404,7 +404,7 @@ _bm25: BM25Index | None = None
 
 def _rag_dir() -> Path:
     """数据目录：env TINDALOS_RAG_DIR 可覆盖，默认 data/rag/。"""
-    return Path(os.environ.get("TINDALOS_RAG_DIR", "data/rag"))
+    return Path(os.environ.get("TINDALOS_RAG_DIR", str(Path(os.environ.get("TINDALOS_DATA_DIR", "data")) / "rag")))
 
 
 def _get_client():

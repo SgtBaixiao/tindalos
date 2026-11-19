@@ -1,3 +1,5 @@
+import './styles/eval.css';
+import { formatDateTime } from '../ui/format';
 /**
  * site/EvalDetailView.tsx —— 评测详情页（#/eval/<run_id>）。
  *
@@ -12,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { getEvalRun } from './api';
+import { json, request } from '../lib/workspace';
 import type { EvalAnnotation, EvalDim, EvalLayer, EvalRun } from './types';
 import {
   DIM_LABELS,
@@ -68,11 +71,70 @@ export function EvalDetailView({ runId, navigate }: EvalDetailViewProps) {
           {error}
         </p>
       ) : run ? (
-        <RunDetail run={run} annotations={annotations} />
+        <>
+          <RunDetail run={run} annotations={annotations} />
+          <HumanReview
+            run={run}
+            onSaved={async () => {
+              const doc = await getEvalRun(runId);
+              setAnnotations(doc.annotations ?? []);
+            }}
+          />
+        </>
       ) : (
         <p className="sx-empty">载入中…</p>
       )}
     </section>
+  );
+}
+
+function HumanReview({ run, onSaved }: { run: EvalRun; onSaved: () => Promise<void> }) {
+  const [notes, setNotes] = useState('');
+  const [usable, setUsable] = useState(false);
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const revision = run.params?.revision;
+  if (!revision) return null;
+  return (
+    <form
+      className="sx-human-review"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (saving) return;
+        setSaving(true);
+        try {
+          await request(
+            `/api/eval/runs/${encodeURIComponent(run.run_id)}/reviews`,
+            json('POST', { revision, usable, notes }),
+          );
+          await onSaved();
+          setMessage('人工反馈已保存，自动评测结论保留。');
+        } catch (err) {
+          setMessage(String(err));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <h2>KP 使用反馈 · 版本 {revision}</h2>
+      <label>
+        <input type="checkbox" checked={usable} onChange={(e) => setUsable(e.target.checked)} />
+        我已检查该版本，可以用于备团
+      </label>
+      <label>
+        依据与待改问题
+        <textarea
+          aria-label="KP 使用反馈"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          required
+        />
+      </label>
+      <button className="sx-btn" disabled={saving || !notes.trim()}>
+        {saving ? '保存中…' : '保存反馈'}
+      </button>
+      {message && <p role="status">{message}</p>}
+    </form>
   );
 }
 
@@ -88,14 +150,16 @@ function RunDetail({ run, annotations }: { run: EvalRun; annotations: EvalAnnota
         <h1 className="sx-eval-runhead__title">{subject}</h1>
         <p className="sx-eval-runhead__meta" data-testid="eval-run-meta">
           {run.run_id}
-          {run.created_at ? ` · ${run.created_at.replace('T', ' ').slice(0, 19)}` : ''}
+          {run.created_at ? ` · ${formatDateTime(run.created_at)}` : ''}
         </p>
       </div>
 
       <div className="sx-eval-stats">
         <div className="sx-eval-stat">
           <span className="sx-eval-stat__label">verdict</span>
-          <span className={`sx-verdict is-${run.verdict ?? 'none'}`}>{verdictLabel(run.verdict)}</span>
+          <span className={`sx-verdict is-${run.verdict ?? 'none'}`}>
+            {verdictLabel(run.verdict)}
+          </span>
         </div>
         <div className="sx-eval-stat">
           <span className="sx-eval-stat__label">状态</span>
@@ -226,7 +290,9 @@ function L1Body({ layer }: { layer: EvalLayer }) {
               <span className="sx-check__mark">{c.passed ? '✓' : '✕'}</span>
               <span className="sx-check__name">
                 {c.name}
-                {c.evidence ? <span className="sx-check__evidence">{c.evidence}</span> : null}
+                {!c.passed && c.evidence ? (
+                  <span className="sx-check__evidence">{c.evidence}</span>
+                ) : null}
               </span>
             </li>
           ))}
@@ -242,7 +308,11 @@ function L3Body({ layer }: { layer: EvalLayer }) {
   return (
     <>
       <p className="sx-layer__reason">
-        {layer.judge === 'llm' ? '裁判：LLM 裁判' : layer.judge ? `裁判：${layer.judge}` : '裁判：未启用'}
+        {layer.judge === 'llm'
+          ? '裁判：LLM 裁判'
+          : layer.judge
+            ? `裁判：${layer.judge}`
+            : '裁判：未启用'}
       </p>
       {layer.estimate_usd != null && (
         <p className="sx-layer__reason">预估成本：${Number(layer.estimate_usd).toFixed(4)}</p>
@@ -272,7 +342,9 @@ function L4Body({ layer }: { layer: EvalLayer }) {
   return (
     <div className="sx-l4">
       <p className="sx-layer__reason">
-        声明 {layer.claim_count} 条 · 支持 {layer.supported ?? 0} 条 · 支持比 {pct}
+        已检查 {layer.claim_count} 条 · 支持 {layer.supported ?? 0} 条 · 矛盾{' '}
+        {layer.contradicted ?? 0} 条 · 未知 {layer.unknown ?? 0} 条 · 未检查{' '}
+        {layer.unevaluated ?? 0} 条 · 支持比 {pct}
       </p>
       {layer.support_ratio != null && (
         <div className="sx-l4__bar">
@@ -331,7 +403,11 @@ function AnnotationsBlock({ annotations }: { annotations: EvalAnnotation[] }) {
                 <div className="sx-eval-ann__head">
                   <span className="sx-badge sx-badge--layer">{a.layer ?? '—'}</span>
                   <span className={`sx-eval-ann__score ${supported ? 'is-passed' : 'is-failed'}`}>
-                    {ratioPercent(a.score)}
+                    {a.explanation?.startsWith('unknown:')
+                      ? '待核对'
+                      : a.explanation?.startsWith('contradicted:')
+                        ? '矛盾'
+                        : ratioPercent(a.score)}
                   </span>
                   <span className="sx-eval-ann__subject">{a.subject_ref ?? '—'}</span>
                 </div>
@@ -340,7 +416,10 @@ function AnnotationsBlock({ annotations }: { annotations: EvalAnnotation[] }) {
                   <ul className="sx-eval-ann__refs">
                     {a.evidence_refs.map((ev, i) => (
                       <li key={i}>
-                        模组 {ev.module_id ?? '—'} · 块 {ev.chunk_index ?? '—'} · 相似度 {ev.score ?? '—'}
+                        模组 {ev.module_id ?? '—'} · 块 {ev.chunk_index ?? '—'} · 相似度{' '}
+                        {ev.score ?? '—'}
+                        {ev.quote && <blockquote>{ev.quote}</blockquote>}
+                        {ev.revision && <span>人工反馈对应版本 {ev.revision}</span>}
                       </li>
                     ))}
                   </ul>

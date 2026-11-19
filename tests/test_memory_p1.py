@@ -300,8 +300,9 @@ def test_api_memories_four_types_and_play_status(client, tmp_path):
 
     mem = body["memories"]
     assert isinstance(mem, dict)
-    assert len(mem["episodic"]) == 3
-    assert all(e["id"].startswith("evm:") and e["content"] for e in mem["episodic"])
+    assert len(mem["episodic"]) == 4
+    assert sum(m["origin"] == "session" for m in mem["episodic"]) == 1
+    assert all(e["id"].startswith(("evm:", "played:")) and e["content"] for e in mem["episodic"])
     npc_keys = {e["subject_key"] for e in mem["semantic"]}
     assert "npc:npc-1" in npc_keys and any(k.startswith("place:") for k in npc_keys)
     assert mem["shortterm"] == []

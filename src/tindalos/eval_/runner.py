@@ -169,8 +169,6 @@ def _split_claims(campaign: Any) -> list[dict]:
         if not text:
             return
         for sentence in rag._split_sentences(text):
-            if len(claims) >= _MAX_CLAIMS:
-                return
             claims.append({"text": sentence, "subject_ref": subject_ref})
 
     for act in campaign.acts:
@@ -194,16 +192,20 @@ def _token_overlap(a: str, b: str) -> int:
     return len(ta & tb)
 
 
-def _claim_supported(claim: str, hits: list[dict]) -> bool:
-    """支持判据：任一 hit score>0 且与 claim 共享 ≥1 个 ≥2 字二元词 token。
+def _source_sentences(text: str) -> list[str]:
+    import re
+    return [s.strip() for s in re.split(r'[。！？.!?\n]+', text) if s.strip()]
 
-    RRF 分数跨语料不可绝对阈值化（1/(k+rank+1) ≈ 0.016 量级），故用
-    score>0 + token 重叠的相对判据，既确定又可测。
-    """
+
+def _claim_supported(claim: str, hits: list[dict]) -> bool:
+    """Only directly quoted text is supported; retrieval similarity is insufficient."""
     for h in hits:
         if not h.get("score") or h["score"] <= 0:
             continue
-        if _token_overlap(claim, h.get("text") or "") >= 1:
+        # Retrieval similarity finds evidence; it cannot establish entailment.
+        # Only direct preserved text is deterministically supported. Paraphrases
+        # remain unknown until reviewed by a semantic judge or a human KP.
+        if claim.strip().rstrip('。.!！？?') in _source_sentences(h.get('text') or '') and claim.strip():
             return True
     return False
 
@@ -214,18 +216,29 @@ def _l4_faithfulness(
     module_id: str | None,
 ) -> dict:
     """L4 faithfulness：拆声明 → 逐条检索 → 判「不被模组支持」+ evidence_refs。"""
-    claims = _split_claims(campaign)
+    all_claims = _split_claims(campaign)
+    claims = all_claims[:_MAX_CLAIMS]
     if not claims:
         return {"status": "skipped", "reason": "no_claims"}
     annotations: list[dict] = []
     corpus_hits = False
     supported = 0
+    contradicted = 0
     for c in claims:
         hits = search_fn(c["text"], module_id=module_id) or []
         hits = [h for h in hits if h.get("score", 0) > 0]
         if hits:
             corpus_hits = True
         ok = _claim_supported(c["text"], hits)
+        judgement = "supported" if ok else "unknown"
+        # Explicit polarity pairs are regression probes, not a full NLI model.
+        for a,b in (("已经死亡","还活着"),("已死亡","仍然活着"),("已经取得","尚未取得")):
+            if any((a in c["text"] and b in h.get("text","") or
+                               b in c["text"] and a in h.get("text","")) and
+                              (c["text"].replace(a, b) if a in c["text"] else c["text"].replace(b, a)).strip().rstrip('。.!！？?') in _source_sentences(h.get("text", "")) for h in hits):
+                judgement = "contradicted"
+                ok = False
+        contradicted += judgement == "contradicted"
         if ok:
             supported += 1
         evidence = [
@@ -233,6 +246,7 @@ def _l4_faithfulness(
                 "module_id": h.get("module_id"),
                 "chunk_index": h.get("chunk_index"),
                 "score": round(float(h.get("score", 0)), 4),
+                "quote": h.get("text", "")[:2000],
             }
             for h in hits[:3]
         ]
@@ -241,7 +255,8 @@ def _l4_faithfulness(
                 "layer": "L4",
                 "subject_ref": c["subject_ref"],
                 "score": 1.0 if ok else 0.0,
-                "explanation": c["text"],
+                "judgement": judgement,
+                "explanation": f"{judgement}: {c['text']}",
                 "evidence_refs": evidence,
             }
         )
@@ -249,9 +264,14 @@ def _l4_faithfulness(
         # 语料不存在（零命中）→ 无法判定 faithfulness，降级跳过而非误判
         return {"status": "skipped", "reason": "no_corpus"}
     return {
-        "status": "passed",
+        "status": "degraded" if len(all_claims) > len(claims) else "passed",
+        "total_claims": len(all_claims),
+        "unevaluated": len(all_claims) - len(claims),
         "claim_count": len(claims),
         "supported": supported,
+        "contradicted": contradicted,
+        "unknown": len(claims)-supported-contradicted,
+        "method": "direct_text_only; semantic entailment requires review",
         "support_ratio": round(supported / len(claims), 3),
         "annotations": annotations,
     }
@@ -472,7 +492,9 @@ def _final_verdict(gate_ok: bool, layers: dict[str, dict]) -> tuple[str, str]:
     """
     if not gate_ok:
         return "fail", "short_circuited"
-    warning = False
+    if layers.get("L4", {}).get("contradicted", 0):
+        return "fail", "completed"
+    warning = any(layers.get(lid, {}).get("status") in ("skipped","degraded") for lid in ("L3","L4","L5"))
     l4 = layers.get("L4", {})
     if l4.get("status") == "passed" and l4.get("support_ratio") is not None:
         if l4["support_ratio"] < _SUPPORT_RATIO_WARN:

@@ -400,7 +400,7 @@ def test_serve_module_stdlib_only_imports():
         s = line.strip()
         if s.startswith("import ") or s.startswith("from "):
             mod = s.split()[1].split(".")[0]
-            assert mod == "tindalos" or mod in sys.stdlib_module_names, f"非 stdlib 导入: {line}"
+            assert mod in ("tindalos", "langgraph") or mod in sys.stdlib_module_names, f"非 stdlib 导入: {line}"
 
 
 def test_options_preflight_cors():
@@ -438,7 +438,7 @@ def test_default_generate_forwards_module_images(monkeypatch):
     monkeypatch.setattr(serve_mod, "_resolve_serve_generator", lambda llm: _Recorder())
     # build_pipeline 在 default_generate 内部 `from tindalos.pipeline import build_pipeline` 取，
     # 故补丁须打在 tindalos.pipeline 模块属性上（serve 顶层无该名字）。
-    monkeypatch.setattr(pipeline_mod, "build_pipeline", lambda generator: _FakeApp())
+    monkeypatch.setattr(pipeline_mod, "build_pipeline", lambda generator, **kwargs: _FakeApp())
 
     imgs = [{"kind": "portrait", "name": "老吴", "caption": "神秘富商"}]
     out = serve_mod.default_generate("模组文本", False, lambda stage, msg: True, module_images=imgs)

@@ -73,8 +73,10 @@ def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     """打开连接并建表（幂等 DDL）。autocommit 模式，无事务嵌套问题。"""
     path = Path(db_path or eval_db_path())
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), isolation_level=None)
+    conn = sqlite3.connect(str(path), isolation_level=None, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     conn.executescript(_SCHEMA)
     return conn
 
@@ -142,26 +144,33 @@ def append_annotations(
         return 0
     now = _now()
     conn = _connect(db_path)
-    for ann in annotations:
-        conn.execute(
-            """
-            INSERT INTO eval_annotations (
-              annotation_id, run_id, layer, subject_ref, score,
-              explanation, evidence_refs, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                ann.get("annotation_id") or _new_id(),
-                run_id,
-                ann.get("layer", ""),
-                ann.get("subject_ref", ""),
-                float(ann.get("score", 0.0)),
-                ann.get("explanation"),
-                json.dumps(ann.get("evidence_refs") or [], ensure_ascii=False),
-                now,
-            ),
-        )
-    conn.close()
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        for ann in annotations:
+            conn.execute(
+                """
+                INSERT INTO eval_annotations (
+                  annotation_id, run_id, layer, subject_ref, score,
+                  explanation, evidence_refs, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ann.get("annotation_id") or _new_id(),
+                    run_id,
+                    ann.get("layer", ""),
+                    ann.get("subject_ref", ""),
+                    float(ann.get("score", 0.0)),
+                    ann.get("explanation"),
+                    json.dumps(ann.get("evidence_refs") or [], ensure_ascii=False),
+                    now,
+                ),
+            )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return len(annotations)
 
 
@@ -204,11 +213,12 @@ def finalize_run(
         fields.append("duration_ms = ?")
         params.append(int(duration_ms))
     params.append(run_id)
-    conn.execute(
-        f"UPDATE eval_runs SET {', '.join(fields)} WHERE run_id = ?", params
+    updated = conn.execute(
+        f"UPDATE eval_runs SET {', '.join(fields)} WHERE run_id = ? AND status = 'running'", params
     )
+    changed = updated.rowcount == 1
     conn.close()
-    return True
+    return changed
 
 
 # ---------------------------------------------------------------- 读取

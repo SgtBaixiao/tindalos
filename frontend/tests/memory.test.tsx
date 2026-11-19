@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, createElement } from 'react';
 import { SiteApp } from '../src/site/SiteApp';
-import { LOADING_MS } from '../src/site/Loading';
+import { navigateRoute, settleRoute } from './siteHarness';
 import type { MemoriesResponse, SessionsResponse } from '../src/site/types';
 
 // App 是 ReactFlow 工作台，jsdom 无 ResizeObserver → 轻量 mock。
@@ -208,34 +208,16 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
-/** 设置 hash 并派发 hashchange（重复无害）。 */
 async function go(hash: string): Promise<void> {
-  window.location.hash = hash;
-  await act(async () => {
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-    await new Promise((r) => setTimeout(r, 0));
-  });
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
+  await navigateRoute(container, hash);
 }
 
-/** 快速启动：fake timers 走完 Loading，再切回真实 timers。 */
 async function bootFast(root: Root, fetchMock: ReturnType<typeof vi.fn>): Promise<void> {
   vi.stubGlobal('fetch', fetchMock);
   stubMatchMedia(false);
-  vi.useFakeTimers();
-  try {
-    act(() => {
-      root.render(createElement(SiteApp));
-    });
-    act(() => {
-      vi.advanceTimersByTime(LOADING_MS.done + 100);
-    });
-  } finally {
-    vi.useRealTimers();
-  }
-  expect(container.querySelector('.sx-loading')).toBeNull();
+  await act(async () => {
+    root.render(createElement(SiteApp));
+  });
   expect(rootContainer()).not.toBeNull();
 }
 
@@ -271,6 +253,7 @@ describe('记忆详情', () => {
     await go('#/memories/c1');
 
     expect(container.querySelector('[data-testid="sx-memory"]')).toBeTruthy();
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('memories');
     expect(container.querySelector('[data-testid="route-title"]')!.textContent).toBe('记忆');
 
@@ -336,6 +319,7 @@ describe('记忆入口与索引', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('memories');
     expect(container.querySelector('[data-testid="sx-memory-index"]')).toBeTruthy();
     expect(container.textContent).toContain('雾港之夜');

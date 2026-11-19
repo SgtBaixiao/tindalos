@@ -1,3 +1,7 @@
+import '../ui/cards.css';
+import './styles/history.css';
+import { PageHeader } from '../ui/PageHeader';
+import { formatDateTime } from '../ui/format';
 /**
  * site/HistoryView.tsx —— 历史记录：两组卡片。
  * 「生成的剧本」点击进入重放（#/history/<campaignId>）；「上传的模组」只读展示。
@@ -34,6 +38,11 @@ export function HistoryView({ navigate }: HistoryProps) {
 
   return (
     <section className="sx-history" data-testid="sx-history">
+      <PageHeader
+        eyebrow="04 / PREVIOUS WORK"
+        title="历史记录"
+        description="重新打开准备过的故事，回看每一幕的内容。"
+      />
       {error && <p className="sx-error">{error}</p>}
 
       <div className="sx-history__group">
@@ -53,7 +62,7 @@ export function HistoryView({ navigate }: HistoryProps) {
                 >
                   <span className="sx-card__title">{c.title}</span>
                   <span className="sx-card__meta">
-                    {c.created_at ?? ''}
+                    {formatDateTime(c.created_at)}
                     {c.acts_count != null ? ` · ${c.acts_count} 幕` : ''}
                   </span>
                   {c.premise && <span className="sx-card__desc">{c.premise}</span>}

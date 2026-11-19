@@ -1,3 +1,4 @@
+import './styles/replay.css';
 /**
  * site/ReplayView.tsx —— 历史记录 · 重放页：按 campaignId 拉取完整剧本交给 ReplayPlayer。
  */
@@ -35,7 +36,11 @@ export function ReplayView({ campaignId, navigate }: ReplayViewProps) {
   return (
     <section className="sx-replay" data-testid="sx-replay">
       <div className="sx-replay__nav">
-        <button type="button" className="sx-btn sx-btn--ghost" onClick={() => navigate('#/history')}>
+        <button
+          type="button"
+          className="sx-btn sx-btn--ghost"
+          onClick={() => navigate('#/history')}
+        >
           ← 历史记录
         </button>
       </div>

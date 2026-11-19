@@ -61,6 +61,8 @@ def _resolve_serve_generator(llm: bool) -> Any:
     from tindalos.generator import DeterministicGenerator, OllamaGenerator
 
     settings = get_settings()
+    if llm and not settings.llm_enabled:
+        raise ValueError("请求了模型生成，请先设置 TINDALOS_LLM_ENABLED=1 和模型连接配置")
     if llm and settings.llm_enabled:
         return OllamaGenerator(settings)
     return DeterministicGenerator()
@@ -72,8 +74,13 @@ def default_generate(
     emit: Callable[[str, str], bool],
     *,
     module_images: list | None = None,
+    campaign_id: str | None = None,
+    rules: str = "COC7",
+    continuation: str = "",
+    persist_memory: bool = True,
+    adopted_npcs: dict | None = None,
 ) -> dict | None:
-    """跑 LangGraph 管线：逐条 emit(stage, message)（返回 False 表示客户端已断开，须停止）。
+    """跑 LangGraph 管线：emit 返回 False 表示任务已停止，拒绝后续发表。
 
     module_images：可选的模组图像视觉识别结果列表（kind/name/caption），透传给生成器
     注入"模组图像参考"上下文块（spec §四.3）；无模块图像时缺省为空列表，行为不变。
@@ -83,15 +90,26 @@ def default_generate(
     from tindalos.pipeline import build_pipeline
 
     generator = _resolve_serve_generator(llm)
+    if not emit("mode", "模型生成" if llm else "离线模板生成（需 KP 审阅）"):
+        return None
     if hasattr(generator, "set_module_context"):  # LLM 生成基于模组全文（loop 迭代改进）
         generator.set_module_context(module_text, title=module_text.strip().splitlines()[0][:40] if module_text.strip() else "")
     if hasattr(generator, "set_module_images"):  # 多模态参考（vision 分类结果）注入生成上下文
         generator.set_module_images(module_images or [])
-    app = build_pipeline(generator=generator)
-    config = {"configurable": {"thread_id": f"serve-{uuid.uuid4().hex[:8]}"}}
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.store.memory import InMemoryStore
+    # Durable job events own task progress. Per-job graph state is disposable;
+    # do not open an unclosed SQLite checkpoint connection on every request.
+    app = build_pipeline(generator=generator, checkpointer=InMemorySaver(), store=InMemoryStore(),
+                         persist_memory=persist_memory)
+    import os
+    config = {"configurable": {"thread_id": f"serve-{uuid.uuid4().hex[:8]}"},
+              "max_concurrency":max(1,int(os.environ.get("TINDALOS_GRAPH_CONCURRENCY","4")))}
     final: dict | None = None
     for mode, chunk in app.stream(
-        {"module_text": module_text}, config=config, stream_mode=["custom", "values"]
+        {"module_text":module_text,"campaign_id":campaign_id or "","rules":rules,"continuation":continuation,
+         "adopted_npcs":adopted_npcs or {}},
+        config=config, stream_mode=["custom", "values"]
     ):
         if mode == "custom" and isinstance(chunk, dict) and "progress" in chunk:
             message = str(chunk["progress"])
@@ -102,6 +120,9 @@ def default_generate(
     campaign = (final or {}).get("campaign")
     if campaign is None:
         raise RuntimeError("管线未产出 campaign")
+    campaign.generation = {"mode":"llm" if llm else "deterministic",
+        "degraded":bool(getattr(generator, "fallback_reasons", [])),
+        "fallback_reasons":list(getattr(generator, "fallback_reasons", []))}
     return campaign.model_dump(mode="json")
 
 
@@ -365,6 +386,10 @@ def serve(
 
     --host 默认 127.0.0.1，--port 默认 8347（前端契约）。
     """
+    if state is None:
+        from tindalos.web import run
+        run(host=host, port=port)
+        return
     server = ThreadingHTTPServer((host, port), make_handler(state or ServeState()))
     server.daemon_threads = True
     try:

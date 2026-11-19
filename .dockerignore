@@ -1,6 +1,8 @@
-# 根 .dockerignore —— 供 .sandbox/web.Dockerfile 的构建上下文收敛
-# （CI 内 docker build 只关心 frontend/，排除一切无关大目录，保证上下文小且干净）
+# Repository build context for frontend and production backend images.
 .git
+.env
+.env.*
+!.env.example
 .venv
 .venv-*
 __pycache__
@@ -11,6 +13,7 @@ data
 build
 dist
 artifacts
+.local-preserved
 frontend/node_modules
 frontend/dist
 node_modules

@@ -2,7 +2,7 @@
  * site/api.ts —— 站点层类型化 fetch 客户端（API 契约）。
  *
  * Base：fetch('/api/...')（vite dev proxy → 127.0.0.1:8347 / 生产同源）。
- * 生成流复用 lib/live 的 fetchGenerateStream（POST SSE 已实现），不重复造轮子。
+ * 生成与编辑由 lib/workspace 管理；此处只提供资料与读取接口。
  *
  * 路径约定（后端并行实现对齐）：
  *  - GET  /api/health
@@ -20,7 +20,7 @@
  *  - GET  /api/eval/runs/<run_id>            → {run, annotations}
  */
 
-import { fetchGenerateStream, type SseFrame } from '../lib/live';
+import { request } from '../lib/workspace';
 import type {
   Campaign,
   CampaignMeta,
@@ -35,18 +35,6 @@ import type {
   VisionResult,
 } from './types';
 
-type ApiErrorBody = { error?: string };
-
-/** 统一 JSON 请求：非 2xx 抛服务端 error 消息（或 HTTP 状态）。 */
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as ApiErrorBody | null;
-    throw new Error(data?.error ?? `HTTP ${res.status}`);
-  }
-  return (await res.json()) as T;
-}
-
 /** 健康检查：失败/非 2xx 一律返回 {ok:false}，不抛错。 */
 export async function health(): Promise<{ ok: boolean }> {
   try {
@@ -55,17 +43,6 @@ export async function health(): Promise<{ ok: boolean }> {
   } catch {
     return { ok: false };
   }
-}
-
-/**
- * 生成剧本：直接复用 lib/live 的 fetchGenerateStream（POST /api/generate，SSE 流）。
- * 工作台侧由 ProgressBand（live + moduleText）消费。
- */
-export function generate(
-  moduleText: string,
-  opts: { llm?: boolean; signal?: AbortSignal } = {},
-): AsyncGenerator<SseFrame> {
-  return fetchGenerateStream(moduleText, opts);
 }
 
 /** 上传模组 PDF（multipart：file + rules?）。 */
@@ -102,7 +79,9 @@ export async function confirmImage(
 }
 
 /** 建立模组索引（RAG 分块）。 */
-export async function ingestModule(moduleId: string): Promise<{ indexed: boolean; chunks: number }> {
+export async function ingestModule(
+  moduleId: string,
+): Promise<{ indexed: boolean; chunks: number }> {
   return request<{ indexed: boolean; chunks: number }>(
     `/api/modules/${encodeURIComponent(moduleId)}/ingest`,
     { method: 'POST' },
@@ -144,7 +123,9 @@ export async function listCampaigns(): Promise<{ campaigns: CampaignMeta[] }> {
 }
 
 /** 重放：按 id 取完整剧本。 */
-export async function getCampaign(id: string): Promise<{ campaign: Campaign; meta?: CampaignMeta }> {
+export async function getCampaign(
+  id: string,
+): Promise<{ campaign: Campaign; meta?: CampaignMeta }> {
   return request<{ campaign: Campaign; meta?: CampaignMeta }>(
     `/api/campaigns/${encodeURIComponent(id)}`,
   );

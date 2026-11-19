@@ -54,6 +54,9 @@ class NPC(BaseModel):
     personality: list[str] = Field(default_factory=list)
     description: str = ""
     acts_roles: dict[str, str] = Field(default_factory=dict)
+    goals: list[str] = Field(default_factory=list)
+    knowledge: list[str] = Field(default_factory=list)
+    resources: list[str] = Field(default_factory=list)
 
 
 class Clue(BaseModel):
@@ -67,6 +70,11 @@ class Clue(BaseModel):
     linked_npc_ids: list[str] = Field(default_factory=list)
     linked_event_ids: list[str] = Field(default_factory=list)
     found_at: str | None = None
+    conclusions: list[str] = Field(default_factory=list)
+    acquisition_conditions: list[str] = Field(default_factory=list)
+    alternatives: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    origin: Literal["source", "proposal", "adopted"] = "proposal"
 
 
 class Event(BaseModel):
@@ -127,6 +135,8 @@ class Campaign(BaseModel):
     id: str
     title: str
     premise: str = ""
+    source_text: str = ""
+    generation: dict[str, Any] = Field(default_factory=dict)
     rules: Literal["COC7", "DND5e"] = "COC7"
     rules_config: dict[str, Any] = Field(default_factory=dict)
     acts: list[Act] = Field(default_factory=list)

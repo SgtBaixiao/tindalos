@@ -11,9 +11,9 @@
         → act_fanout（Send 并行）→ write_act×M（每幕：@task 并行写场景）
         → compose（汇总 models.Campaign + 备团笔记 markdown + store 事实写入）→ END
 
-基础设施：checkpoint=SqliteSaver（settings.checkpoint_dir 文件）；store=build_store(settings)
-（settings.store_dir 可写 → SqliteStore 落盘跨会话，否则 InMemoryStore；namespace
-('campaigns', campaign_id, 'facts')）；进度经 get_stream_writer 发 custom 事件。
+基础设施：默认使用内存 checkpoint 和 store；持久资源由调用者注入并关闭。
+任务身份、进度和已提交修订由 Web 任务库持久保存。
+进度经 get_stream_writer 发 custom 事件。
 全程确定性：DeterministicGenerator 下零网络零 LLM。
 """
 
@@ -24,11 +24,10 @@ import operator
 import os
 import random
 import re
-import sqlite3
+import json
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.config import get_store, get_stream_writer
 from langgraph.func import task
 from langgraph.graph import END, START, StateGraph
@@ -77,6 +76,9 @@ class PipelineState(TypedDict):
     act_draft: dict  # write_act Send 分支载荷
     messages: Annotated[list[AnyMessage], operator.add]
     notes_md: str
+    continuation: str
+    adopted_npcs: dict[str, dict]
+    rules: str
 
 
 # ---------------------------------------------------------------- 工具（Function Calling 实证）
@@ -217,12 +219,11 @@ def _write_scene(
     scene["id"] = f"{act_draft['id']}-scene-{idx + 1}"
     scene["title"] = scene_title
     events = scene.get("events", [])
+    id_map = {ev.get("id"): f"{act_draft['id']}-scene-{idx + 1}-ev-{j + 1}" for j, ev in enumerate(events)}
     for j, ev in enumerate(events):
         ev = dict(ev)
         ev["id"] = f"{act_draft['id']}-scene-{idx + 1}-ev-{j + 1}"
-        ev["next_event_ids"] = [
-            f"{act_draft['id']}-scene-{idx + 1}-ev-{k + 1}" for k in range(j + 1, len(events))
-        ]
+        ev["next_event_ids"] = [id_map[n] for n in ev.get("next_event_ids", []) if n in id_map]
         events[j] = ev
     scene["events"] = events
     return scene
@@ -231,7 +232,7 @@ def _write_scene(
 # ---------------------------------------------------------------- 节点构造
 
 
-def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
+def _build_nodes(generator: Generator, settings: Settings, *, persist_memory=True) -> dict[str, Any]:
     """构造全部图节点（闭包绑定生成器与 settings）。
 
     settings 闭包供 compose 的 memory_entries 写入口与 write_act 的记忆注入
@@ -242,7 +243,7 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
         module_text = (state.get("module_text") or "").strip()
         return {
             "premise": extract_premise(module_text),
-            "campaign_id": campaign_id_for(module_text),
+            "campaign_id": state.get("campaign_id") or campaign_id_for(module_text),
         }
 
     def kp_plan(state: PipelineState) -> dict:
@@ -252,10 +253,19 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
         可经环境变量 TINDALOS_N_ACTS / TINDALOS_N_NPCS 覆盖。
         """
         premise = state.get("premise") or extract_premise(state.get("module_text", ""))
-        n_acts = max(1, int(os.environ.get("TINDALOS_N_ACTS", str(_DEFAULT_N_ACTS))))
-        n_npcs = max(1, int(os.environ.get("TINDALOS_N_NPCS", str(_DEFAULT_N_NPCS))))
-        npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
-        act_drafts = generator.generate_acts(premise, n_acts)
+        n_acts = min(12, max(1, int(os.environ.get("TINDALOS_N_ACTS", str(_DEFAULT_N_ACTS)))))
+        n_npcs = min(30, max(1, int(os.environ.get("TINDALOS_N_NPCS", str(_DEFAULT_N_NPCS)))))
+        # Tool feedback must not repeat the expensive planner/model calls.
+        if state.get("act_drafts"):
+            npcs = dict(state.get("npcs", {}))
+            act_drafts = list(state["act_drafts"])
+        else:
+            if state.get("adopted_npcs"):
+                # Role links reference earlier acts; drafts validate separately.
+                npcs = {nid:{**npc,"acts_roles":{}} for nid,npc in state["adopted_npcs"].items()}
+            else:
+                npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
+            act_drafts = generator.generate_acts(premise, n_acts)
         npc_ids = list(npcs.keys())
         for i, act in enumerate(act_drafts):
             act["npc_ids"] = npc_ids[i::len(act_drafts)]
@@ -308,6 +318,7 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
                     "npc": dict(state.get("npcs", {}).get(nid, {})),
                     "premise": premise,
                     "act_drafts": list(state.get("act_drafts", [])),
+                    "adopted_npcs": state.get("adopted_npcs", {}),
                 },
             )
             for nid in state.get("npc_ids", [])
@@ -321,7 +332,7 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
             return {}
         rng = random.Random(hashlib.sha256((npc_id + state.get("premise", "")).encode("utf-8")).hexdigest())
         extra = rng.choice(["暗藏秘密", "立场摇摆", "身负旧债"])
-        npc["personality"] = list(npc.get("personality", [])) + [extra]
+        npc["personality"] = list(npc.get("personality", [])) + ([] if state.get("adopted_npcs") else [extra])
         npc["acts_roles"] = {
             act["id"]: f"{npc.get('name', npc_id)}在本幕的引导者"
             for act in state.get("act_drafts", [])
@@ -344,6 +355,8 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
                     "act_draft": dict(d),
                     "premise": state.get("premise", ""),
                     "campaign_id": campaign_id,
+                    "continuation": state.get("continuation", ""),
+                    "npcs": state.get("npcs", {}),
                 },
             )
             for d in state.get("act_drafts", [])
@@ -361,16 +374,19 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
         campaign_id = state.get("campaign_id", "")
         npc_ids = list(draft.get("npc_ids", []))
         scene_titles = list(draft.get("scene_titles", [])) or ["场景一"]
-        memory_context = ""
+        memory_context = state.get("continuation", "")
         if campaign_id:
             try:
-                memory_context = assemble_memory_context(
+                memory_context += assemble_memory_context(
                     campaign_id,
                     f"{draft.get('title', '')}·{premise}",
                     db_path=entries_db_path(settings),
                 )
             except Exception:  # noqa: BLE001 - 记忆注入失败不阻塞生成（G5 修正）
-                memory_context = ""
+                pass
+        personas = {nid: state.get("npcs", {}).get(nid, {}) for nid in npc_ids}
+        if personas:
+            memory_context += "\n【NPC 人格与动机资料；知识不可越过记录】\n" + json.dumps(personas, ensure_ascii=False)
         futures = [
             _write_scene(generator, draft, premise, npc_ids, i, t, memory_context)
             for i, t in enumerate(scene_titles)
@@ -397,8 +413,10 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
             dict(state.get("npcs", {})),
         )
         campaign = assembled["campaign"]
+        campaign.id = state.get("campaign_id") or campaign.id
+        campaign.rules = state.get("rules", "COC7")
         store = get_store()
-        if store is not None:
+        if persist_memory and store is not None:
             try:
                 store.put(
                     ("campaigns", campaign.id, "facts"),
@@ -415,7 +433,9 @@ def _build_nodes(generator: Generator, settings: Settings) -> dict[str, Any]:
                 writer({"progress": f"记忆持久化失败（已跳过）：{mem_err}"})
         # memory_entries 增量层（P0-a）：情景 + 语义，独立 SQLite，同样写失败不阻塞
         try:
-            stats = capture_memory_entries(campaign, db_path=entries_db_path(settings))
+            stats = capture_memory_entries(campaign, db_path=entries_db_path(settings)) if persist_memory else None
+            if stats is None:
+                return {"campaign":campaign,"notes_md":render_notes(campaign),"world":assembled["world"],"progress":["校对付印"]}
             writer({"progress": f"记忆条目入库（情景 {stats['episodic']['total']} / 语义 {stats['semantic']['total']}）"})
         except Exception as mem_err:  # noqa: BLE001 - 写失败不阻塞生成（G5 修正）
             writer({"progress": f"记忆条目入库失败（已跳过）：{mem_err}"})
@@ -447,32 +467,29 @@ def _build_clues_and_relations(acts: list[dict], npcs: dict[str, dict]) -> tuple
         scenes = act.get("scenes", [])
         if not scenes:
             continue
-        outcome = scenes[0]["events"][-1]
+        candidates = [e for scene in scenes for e in scene.get("events", []) if e.get("kind") == "trigger"]
+        if not candidates:
+            continue
+        outcome = candidates[0]
         clue_id = f"clue-{act['id']}"
-        npc_id = (act.get("npc_ids") or list(npcs))[0]
+        npc_id = next(iter(act.get("npc_ids") or npcs), None)
         clues.append(
             {
                 "id": clue_id,
                 "name": f"{act.get('title', act['id'])}的关键线索",
-                "description": "指向本幕真相的关键线索。",
-                "linked_npc_ids": [npc_id],
+                "description": outcome.get("description", ""),
+                "conclusions": [act.get("summary", "")] if act.get("summary") else [],
+                "acquisition_conditions": list(outcome.get("conditions", [])),
+                "alternatives": [],
+                "source_refs": [f"proposal:event:{outcome['id']}"],
+                "origin": "proposal",
+                "linked_npc_ids": [npc_id] if npc_id else [],
                 "linked_event_ids": [outcome["id"]],
             }
         )
-        relations.append(
-            {
-                "source": npc_id, "target": clue_id, "type": "指向",
-                "label": "指向线索", "valid_from": "1900-01-01",
-            }
-        )
-        if i + 1 < len(acts):
-            nxt_id = (acts[i + 1].get("npc_ids") or list(npcs))[0]
-            relations.append(
-                {
-                    "source": npc_id, "target": nxt_id, "type": "认识",
-                    "label": "互相认识", "valid_from": "1900-01-01",
-                }
-            )
+        if npc_id:
+            relations.append({"source":npc_id,"target":clue_id,"type":"指向",
+                "label":"创作提议：关联线索", "valid_from":"", "note":"尚待 KP 审阅；无原文证据不构造人物相识关系"})
     return clues, relations
 
 
@@ -492,6 +509,7 @@ def compose_campaign(module_text: str, premise: str, acts: list[dict], npcs: dic
         id=campaign_id_for(module_text),
         title=f"模组《{title_from_text(module_text)}》",
         premise=premise,
+        source_text=module_text,
         acts=[Act(**a) for a in acts],
         npcs={nid: NPC(**n) for nid, n in npcs.items()},
         clues=[Clue(**c) for c in clues],
@@ -561,27 +579,24 @@ def build_pipeline(
     generator: Generator | None = None,
     checkpointer: Any = None,
     store: Any = None,
+    persist_memory: bool = True,
 ):
     """组装并编译 LangGraph 管线。
 
     - settings：配置（缺省 get_settings()）；
     - generator：生成器（缺省按 settings.llm_enabled 构造）；
-    - checkpointer：SqliteSaver（缺省用 settings.checkpoint_dir/checkpoints.sqlite）；
-    - store：缺省 build_store(settings)——settings.store_dir 可写时 SqliteStore 落盘
-      （跨会话记忆），否则 InMemoryStore；命名空间 ('campaigns', <campaign_id>, 'facts')。
+    - checkpointer/store default to disposable memory resources.
+    - Callers can inject owned persistent resources and must close them after use.
     """
     settings = settings or get_settings()
     generator = generator or build_generator(settings)
-    store = store if store is not None else build_store(settings)
-    if checkpointer is None:
-        # from_conn_string 是 @contextmanager，不可 next() 取值；
-        # 直接 sqlite3.connect + SqliteSaver(conn)（check_same_thread=False 供并行分支共用）。
-        cp_path = settings.checkpoint_dir / "checkpoints.sqlite"
-        cp_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(_checkpoint_uri(cp_path), check_same_thread=False)
-        checkpointer = SqliteSaver(conn)
+    # Callers needing persistent checkpoints/stores own and close those resources.
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.store.memory import InMemoryStore
+    store = store if store is not None else InMemoryStore()
+    checkpointer = checkpointer if checkpointer is not None else InMemorySaver()
 
-    nodes = _build_nodes(generator, settings)
+    nodes = _build_nodes(generator, settings, persist_memory=persist_memory)
 
     builder = StateGraph(PipelineState)
     builder.add_node("kp_parse", nodes["kp_parse"])
@@ -619,8 +634,12 @@ def run_pipeline(
     stream_progress: bool = False,
 ) -> dict:
     """便捷入口：一次 invoke 返回最终状态；stream_progress 时以 custom 模式流式返回进度事件列表。"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.store.memory import InMemoryStore
     app = build_pipeline(
-        settings=settings, generator=generator, checkpointer=checkpointer, store=store
+        settings=settings, generator=generator,
+        checkpointer=checkpointer if checkpointer is not None else InMemorySaver(),
+        store=store if store is not None else InMemoryStore()
     )
     config = {"configurable": {"thread_id": thread_id}}
     if stream_progress:

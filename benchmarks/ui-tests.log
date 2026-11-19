@@ -1,0 +1,13 @@
+
+> tindalos-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.10 /Users/bytedance/Documents/ChatGPT/Tindalos/source/frontend
+
+
+ Test Files  11 passed (11)
+      Tests  110 passed (110)
+   Start at  15:20:35
+   Duration  3.25s (transform 1.94s, setup 0ms, import 2.69s, tests 3.45s, environment 11.88s)
+

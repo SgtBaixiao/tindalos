@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -88,14 +89,49 @@ def entries_db_path(settings: Settings | None = None) -> Path:
     return settings.store_dir / "memory_entries.sqlite"
 
 
+_SCHEMA_LOCK = threading.Lock()
+
+
+class SessionConflict(ValueError):
+    pass
+
+
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     """打开连接并建表（幂等 DDL）。autocommit 模式，无事务嵌套问题。"""
     path = Path(db_path or entries_db_path())
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), isolation_level=None)
+    conn = sqlite3.connect(str(path), isolation_level=None, timeout=10)
     conn.row_factory = sqlite3.Row
-    conn.executescript(_SCHEMA)
+    conn.execute("PRAGMA busy_timeout=10000")
+    if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+        with _SCHEMA_LOCK:
+            if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+                _migrate(conn)
     return conn
+
+
+def _migrate(conn):
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
+    conn.executescript(_SCHEMA)
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(memory_entries)")}
+    if "origin" not in columns:
+        conn.execute("ALTER TABLE memory_entries ADD COLUMN origin TEXT NOT NULL DEFAULT 'planned'")
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(play_sessions)")}
+    if "request_key" not in columns:
+        conn.execute("ALTER TABLE play_sessions ADD COLUMN request_key TEXT")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ps_request ON play_sessions(campaign_id,request_key)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS session_facts (
+        id INTEGER PRIMARY KEY, campaign_id TEXT NOT NULL, session_id TEXT NOT NULL,
+        subject_key TEXT NOT NULL, content TEXT NOT NULL, audience TEXT NOT NULL,
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_campaign ON session_facts(campaign_id,subject_key,id DESC)")
+    if "request_hash" not in {r[1] for r in conn.execute("PRAGMA table_info(play_sessions)")}:
+        conn.execute("ALTER TABLE play_sessions ADD COLUMN request_hash TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_origin ON memory_entries(campaign_id,origin,status)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ps_request ON play_sessions(campaign_id,request_key)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_audience ON session_facts(campaign_id,subject_key,audience,id DESC)")
+    conn.execute("PRAGMA user_version=1")
 
 
 def _now() -> str:
@@ -383,9 +419,14 @@ def assemble_memory_context(
     - 排序分 = bm25 × decay^天数 × (0.5 + importance)，天然偏向近期 + 高重要条目；
     - 克制：top_k 上限 + 空命中即截断，不把无关记忆塞进生成。
     """
-    rows = list_entries(campaign_id, db_path=db_path, status=_ACTIVE)
+    conn = _connect(db_path)
+    try:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM memory_entries WHERE campaign_id=? AND origin='session' AND status='active'", (campaign_id,))]
+    finally:
+        conn.close()
     if not rows:
         return ""
+    by_id = {r["id"]: r for r in rows}
     idx = BM25Index().fit(
         [r["content"] for r in rows],
         doc_ids=[r["id"] for r in rows],
@@ -398,7 +439,7 @@ def assemble_memory_context(
     for h in hits:
         if not h.get("score") or h["score"] <= 0:
             continue
-        row = next((r for r in rows if r["id"] == h["doc_id"]), None)
+        row = by_id.get(h["doc_id"])
         if row is None:
             continue
         try:
@@ -432,7 +473,7 @@ def _active_rows(conn: sqlite3.Connection, campaign_id: str, memory_type: str) -
     rowid 作同秒时间戳的稳定 tiebreaker，保证确定性：同样输入两次调用取同一批。
     """
     rows = conn.execute(
-        "SELECT * FROM memory_entries WHERE campaign_id = ? AND memory_type = ? AND status = 'active' "
+        "SELECT * FROM memory_entries WHERE campaign_id = ? AND memory_type = ? AND status = 'active' AND origin = 'planned' "
         "ORDER BY created_at ASC, rowid ASC",
         (campaign_id, memory_type),
     ).fetchall()
@@ -891,14 +932,27 @@ def record_session(
     llm: Any | None = None,
     play_status: str | None = None,
     conflicts: Any | None = None,
+    request_key: str | None = None,
+    facts: list[dict] | None = None,
 ) -> dict:
     """游玩会话记录（设计文档 §3.3 / P1 ticket 01）。
 
     KP 回叙 → 新增 play_sessions 行（session_index = 现有计数 + 1）→ 触发轻量
     consolidate。确定性路径零 LLM（传 llm 时走 LLM 两段式）。
     """
+    digest = hashlib.sha256(json.dumps({"summary":session_summary,"play_status":play_status,"conflicts":conflicts,"facts":facts or []}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     conn = _connect(db_path)
     try:
+        conn.execute("BEGIN IMMEDIATE")
+        if request_key:
+            old = conn.execute("SELECT * FROM play_sessions WHERE campaign_id=? AND request_key=?",
+                               (campaign_id,request_key)).fetchone()
+            if old:
+                if old["request_hash"] != digest:
+                    raise SessionConflict("idempotency key reused with different session")
+                conn.rollback()
+                return {"session_id":old["id"],"session_index":old["session_index"],
+                        "play_status":old["play_status"],"consolidate":{"llm":False,"replayed":True}}
         row = conn.execute(
             "SELECT COALESCE(MAX(session_index), 0) AS n FROM play_sessions WHERE campaign_id = ?",
             (campaign_id,),
@@ -907,8 +961,8 @@ def record_session(
         session_id = f"sess:{campaign_id}:{session_index}"
         now = _now()
         conn.execute(
-            "INSERT INTO play_sessions (id, campaign_id, session_index, summary, play_status, conflicts, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO play_sessions (id, campaign_id, session_index, summary, play_status, conflicts, created_at, request_key, request_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 session_id,
                 campaign_id,
@@ -917,17 +971,72 @@ def record_session(
                 play_status,
                 json.dumps(conflicts, ensure_ascii=False) if conflicts is not None else None,
                 now,
+                request_key, digest,
             ),
         )
+        # Session text is a KP-confirmed record, distinct from generated plans.
+        # Keep full text in play_sessions; searchable chunks retain provenance.
+        for i in range(0, len(session_summary), _MAX_CONTENT_CHARS):
+            content = session_summary[i:i + _MAX_CONTENT_CHARS]
+            conn.execute("""INSERT INTO memory_entries
+                (id,campaign_id,memory_type,content,importance,source_episode,ref_ids,status,
+                 content_hash,created_at,updated_at,origin)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,'session')""",
+                (f"played:{session_id}:{i}",campaign_id,"episodic",content,1.0,session_id,
+                 json.dumps([session_id]),_ACTIVE,_content_hash(content),now,now))
+        for fact in facts or []:
+            conn.execute("""INSERT INTO session_facts
+                (campaign_id,session_id,subject_key,content,audience,created_at) VALUES (?,?,?,?,?,?)""",
+                (campaign_id,session_id,fact["subject_key"],fact["content"],fact.get("audience","kp"),now))
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     finally:
         conn.close()
-    result = consolidate(campaign_id, db_path, llm=llm)
+    try:
+        result = consolidate(campaign_id, db_path, llm=llm)
+    except Exception as exc:
+        # The original session has committed. A derived summary failure must
+        # not invite a duplicate session submission or hide a successful save.
+        result = {"status":"failed", "error":str(exc), "session_saved":True}
     return {
         "session_id": session_id,
         "session_index": session_index,
         "play_status": play_status,
         "consolidate": result,
     }
+
+
+def current_facts(campaign_id: str, db_path: Path | None = None, *, audience="kp") -> list[dict]:
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute("""SELECT f.* FROM session_facts f WHERE f.campaign_id=?
+            AND f.id=(SELECT MAX(v.id) FROM session_facts v WHERE v.campaign_id=f.campaign_id
+              AND v.subject_key=f.subject_key AND v.audience=f.audience) ORDER BY f.id""", (campaign_id,))
+        return [dict(r) for r in rows if audience == "kp" or r["audience"] in ("public",audience)]
+    finally:
+        conn.close()
+
+
+def continuation_context(campaign_id: str, db_path: Path | None = None) -> str:
+    conn = _connect(db_path)
+    try:
+        sessions = [dict(r) for r in conn.execute(
+            "SELECT * FROM play_sessions WHERE campaign_id=? ORDER BY session_index DESC LIMIT 6", (campaign_id,))]
+    finally:
+        conn.close()
+    facts = current_facts(campaign_id, db_path)
+    if not sessions and not facts:
+        return ""
+    lines = ["【KP 已确认的实际游玩记录；预设剧情未发生前不得当作经历】"]
+    # Current facts precede summaries so verbose session prose cannot crowd them out.
+    for f in reversed(facts):
+        lines.append(f"当前状态 {f['subject_key']}〔知情范围 {f['audience']}〕：{f['content']}")
+    for s in reversed(sessions):
+        lines.append(f"场次 {s['session_index']}〔{s['id']}〕：{s['summary']}")
+    context = "\n".join(lines)
+    return context[:24000] + ("\n〔上下文已达预算，完整记录在场次档案〕" if len(context)>24000 else "")
 
 
 def current_play_status(campaign_id: str, db_path: Path | None = None) -> str | None:

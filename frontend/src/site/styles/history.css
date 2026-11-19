@@ -1,0 +1,15 @@
+/* ---------- 历史 History ---------- */
+
+.sx-history {
+  padding: clamp(1.4rem, 3vw, 2.5rem);
+}
+.sx-history__group {
+  margin-bottom: 2.4rem;
+}
+.sx-history__group h2 {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sx-ink-faint);
+  margin: 0 0 1rem;
+}

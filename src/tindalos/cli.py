@@ -127,41 +127,15 @@ def _generate_campaign(
     generator: Generator,
     module_text: str,
     premise: str,
-    n_acts: int = _DEFAULT_N_ACTS,
-    n_npcs: int = _DEFAULT_N_NPCS,
 ) -> Campaign:
-    """生成器 → 完整 Campaign：幕（重编号场景/事件 id，保证全局唯一）+ NPC。
-
-    线索/关系/Campaign 装配与备团笔记统一委托 pipeline.compose_campaign（t10 去重复）。
-    """
-    if hasattr(generator, "set_module_context"):  # LLM 生成基于模组全文（loop 迭代改进）
-        generator.set_module_context(module_text, title=module_text.strip().splitlines()[0][:40] if module_text.strip() else "")
-    act_drafts = generator.generate_acts(premise, n_acts)
-    npcs = {npc["id"]: npc for npc in generator.generate_npcs(premise, n_npcs)}
-    npc_ids = list(npcs.keys())
-    acts: list[dict] = []
-    for i, draft in enumerate(act_drafts):
-        draft = dict(draft)
-        draft["npc_ids"] = npc_ids[i::len(act_drafts)] if act_drafts else []
-        scenes: list[dict] = []
-        for idx, scene_title in enumerate(draft.get("scene_titles") or ["场景一"]):
-            scene = dict(generator.generate_scene(f"{draft['title']}·{scene_title}", premise, draft["npc_ids"]))
-            scene["id"] = f"{draft['id']}-scene-{idx + 1}"
-            scene["title"] = scene_title
-            events = scene.get("events") or []
-            renumbered = []
-            for j, ev in enumerate(events):
-                ev = dict(ev)
-                ev["id"] = f"{draft['id']}-scene-{idx + 1}-ev-{j + 1}"
-                ev["next_event_ids"] = [
-                    f"{draft['id']}-scene-{idx + 1}-ev-{k + 1}" for k in range(j + 1, len(events))
-                ]
-                renumbered.append(ev)
-            scene["events"] = renumbered
-            scenes.append(scene)
-        draft["scenes"] = scenes
-        acts.append(draft)
-    return compose_campaign(module_text, premise, acts, npcs)["campaign"]
+    """CLI 与 Web 共用同一生成图；领域装配与引用规则仅维护一份。"""
+    from tindalos.pipeline import run_pipeline
+    result = run_pipeline(module_text, generator=generator)
+    campaign = result['campaign']
+    campaign.generation = {'mode':'llm' if isinstance(generator,OllamaGenerator) else 'deterministic',
+        'degraded':bool(getattr(generator,'fallback_reasons',[])),
+        'fallback_reasons':list(getattr(generator,'fallback_reasons',[]))}
+    return campaign
 
 
 # ---------------------------------------------------------------- 展示
@@ -234,7 +208,12 @@ def generate(
         try:
             from tindalos.memory import build_store, write_memory_facts
 
-            write_memory_facts(build_store(), campaign)
+            store = build_store()
+            try:
+                write_memory_facts(store, campaign)
+            finally:
+                if hasattr(store, 'conn'):
+                    store.conn.close()
         except Exception as mem_err:  # noqa: BLE001 - 记忆写入失败不阻塞生成主流程
             typer.echo(f"注意：记忆写入失败（{mem_err}）", err=True)
         notes_path.write_text(notes_text, encoding="utf-8")

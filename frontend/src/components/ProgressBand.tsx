@@ -20,13 +20,7 @@ import { useGraphStore } from '../store/useGraphStore';
  * - 离线（无 live 参数）：直接读静态 progress.jsonl（示例进度事件）
  * - KP 主控步骤时间线 + NPC 小胶囊列 + 打字机滚动（reduced-motion 静止）
  */
-export function ProgressBand({
-  live,
-  moduleText,
-}: {
-  live?: boolean;
-  moduleText?: string;
-}) {
+export function ProgressBand({ live, moduleText }: { live?: boolean; moduleText?: string }) {
   const liveMode = live ?? isLive();
   const setCampaignId = useGraphStore((s) => s.setCampaignId);
   const [events, setEvents] = useState<ProgressEvent[]>([]);

@@ -1,0 +1,47 @@
+.sx-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+.sx-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--sx-line);
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  background: var(--sx-paper-deep);
+  color: var(--sx-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms;
+}
+.sx-card:hover {
+  border-color: var(--sx-line-strong);
+}
+.sx-card--static {
+  cursor: default;
+}
+.sx-card--static:hover {
+  transform: none;
+  box-shadow: none;
+}
+.sx-card__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sx-card__meta {
+  font-family: var(--sx-font-mono);
+  font-size: 0.72rem;
+  color: var(--sx-ink-faint);
+}
+.sx-card__desc {
+  font-size: 0.82rem;
+  color: var(--sx-ink-soft);
+  line-height: 1.5;
+}

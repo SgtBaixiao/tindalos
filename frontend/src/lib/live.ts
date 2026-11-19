@@ -36,7 +36,7 @@ export type SseFrame =
   | { kind: 'error'; message: string };
 
 /** fetchRegenerate 成功载荷。 */
-export type RegenerateResult = { campaign: CampaignView; applied: string[] };
+export type RegenerateResult = { campaign: CampaignView; revision?: number; applied: string[] };
 
 /** JSON.parse 安全包装：失败抛 SyntaxError（供调用方兜底降级）。 */
 function safeParse(text: string): unknown {
@@ -54,9 +54,9 @@ function classify(payload: unknown): SseFrame {
   }
   const p = payload as Record<string, unknown>;
   if (p.done === true) {
-    const campaign = (typeof p.campaign === 'object' && p.campaign !== null ? p.campaign : null) as
-      | CampaignView
-      | null;
+    const campaign = (
+      typeof p.campaign === 'object' && p.campaign !== null ? p.campaign : null
+    ) as CampaignView | null;
     return { kind: 'done', campaign };
   }
   if (typeof p.error === 'string') {
@@ -164,9 +164,7 @@ export async function* fetchGenerateStream(
 /**
  * SSE 进度帧 → ProgressBand 进度事件（agent 推导：stage=npc → npc，其余 kp）。
  */
-export function sseToProgressEvent(
-  frame: Extract<SseFrame, { kind: 'progress' }>,
-): ProgressEvent {
+export function sseToProgressEvent(frame: Extract<SseFrame, { kind: 'progress' }>): ProgressEvent {
   const isNpc = frame.stage === 'npc';
   const npcMatch = /NPC\s+([^\s·:：]+)/.exec(frame.message);
   return {
@@ -188,7 +186,7 @@ export function sseToProgressEvent(
 export async function fetchRegenerate(
   campaignId: string,
   nodeId: string,
-  init: { signal?: AbortSignal } = {},
+  init: { signal?: AbortSignal; revision?: number } = {},
 ): Promise<RegenerateResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REGENERATE_TIMEOUT_MS);
@@ -198,7 +196,11 @@ export async function fetchRegenerate(
     const res = await fetch('/api/regenerate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaign_id: campaignId, node_id: nodeId }),
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        node_id: nodeId,
+        expected_revision: init.revision,
+      }),
       signal: controller.signal,
     });
     const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
@@ -210,6 +212,7 @@ export async function fetchRegenerate(
     }
     return {
       campaign: data.campaign as CampaignView,
+      revision: typeof data.revision === 'number' ? data.revision : undefined,
       applied: Array.isArray(data.applied) ? (data.applied as string[]) : [],
     };
   } finally {
@@ -262,20 +265,14 @@ async function fetchCampaignJson(url: string): Promise<CampaignView> {
  * 加载 campaign：live 时 GET /api/campaigns/<id>，API 失败回退静态
  * public/campaign.json；离线直接读静态（无回退）。
  */
-export async function loadCampaign(live: boolean, campaignId: string | null): Promise<CampaignView> {
+export async function loadCampaign(
+  live: boolean,
+  campaignId: string | null,
+): Promise<CampaignView> {
   if (!live || !campaignId) {
     return fetchCampaignJson(campaignSourceUrl(false, null));
   }
-  try {
-    return await fetchCampaignJson(campaignSourceUrl(true, campaignId));
-  } catch (err) {
-    // 后端未起 / campaign 未缓存 → 离线回退静态（同 ProgressBand 哲学）
-    try {
-      return await fetchCampaignJson(campaignSourceUrl(false, null));
-    } catch {
-      throw err;
-    }
-  }
+  return fetchCampaignJson(campaignSourceUrl(true, campaignId));
 }
 
 /** 静态 progress.jsonl 读取（ProgressBand 离线/回退共用）。 */

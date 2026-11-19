@@ -1,0 +1,31 @@
+{
+  "repository": "https://github.com/SgtBaixiao/tindalos",
+  "commit": "feca892bfbaf7b7a9ca04dc87b2908ad03d7fc9f",
+  "date": "2026-11-19",
+  "method": "Parse original source AST, extract the named original functions, remove decorators, and execute them in isolation with controlled input. This is not a full pipeline or retrieval test.",
+  "input_origin": "Synthetic counterexamples; no user play session or actual module observation is claimed.",
+  "probes": [
+    {
+      "source": "src/tindalos/pipeline.py",
+      "function": "_write_scene",
+      "line": 198,
+      "controlled_dependency": "Generator returning a copy of a three-event linear scene",
+      "input_entry_next": ["trigger"],
+      "input_trigger_next": ["outcome"],
+      "output_entry_next": ["act-1-scene-1-ev-2", "act-1-scene-1-ev-3"],
+      "output_entry_has_branch_by_current_predicate": true,
+      "observation": "The transformation adds an extra outgoing edge even when the input contains no branch."
+    },
+    {
+      "source": "src/tindalos/eval_/runner.py",
+      "function": "_claim_supported",
+      "line": 197,
+      "original_dependencies": ["_token_overlap", "src/tindalos/rag.py:tokenize", "src/tindalos/rag.py:_is_cjk"],
+      "claim": "霍普已经死亡。",
+      "source_hit": {"score": 0.016, "text": "霍普还活着。"},
+      "shared_tokens": ["霍普"],
+      "accepted_as_supported": true,
+      "observation": "The support predicate accepts a contradictory statement when it shares a name token with a positively scored hit."
+    }
+  ]
+}

@@ -180,7 +180,7 @@ def test_campaign_list_without_snapshot(db):
     rows = history.list_campaigns()
     assert [r["id"] for r in rows] == ["c2", "c1"]
     assert set(rows[0].keys()) == {
-        "id", "title", "rules", "created_at", "event_count", "size",
+        "id", "title", "rules", "created_at", "event_count", "size", "revision", "module_id",
     }
     assert "snapshot" not in rows[0]
     assert "snapshot_json" not in rows[0]

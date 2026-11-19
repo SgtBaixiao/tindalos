@@ -1,0 +1,106 @@
+/* ---------- 重放 Replay ---------- */
+
+.sx-replay {
+  padding: clamp(1.4rem, 3vw, 2.5rem);
+}
+.sx-replay__nav {
+  margin-bottom: 1rem;
+}
+.sx-replay__status {
+  color: var(--sx-ink-faint);
+}
+
+.sx-replay-player {
+  max-width: 720px;
+}
+.sx-replay-player__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.sx-replay-player__title {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  letter-spacing: -0.02em;
+}
+.sx-replay-player__desc {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--sx-ink-soft);
+}
+.sx-replay-player__conditions {
+  list-style: none;
+  margin: 0.8rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.sx-replay-player__conditions li {
+  font-size: 0.85rem;
+  color: var(--sx-ink-soft);
+}
+.sx-replay-player__timeline {
+  display: flex;
+  gap: 0.35rem;
+  margin: 1.4rem 0 0.8rem;
+  flex-wrap: wrap;
+}
+.sx-replay-player__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--sx-line-strong);
+  background: var(--sx-paper-deep);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    transform 0.4s var(--sx-ease),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+.sx-replay-player__dot.is-active {
+  background: var(--sx-ink);
+  border-color: var(--sx-ink);
+  transform: scale(1.35);
+}
+.sx-replay-player__dot.is-past {
+  background: var(--sx-ink-faint);
+  border-color: var(--sx-ink-faint);
+}
+.sx-replay-player__progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sx-line);
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.sx-replay-player__bar {
+  display: block;
+  height: 100%;
+  background: var(--sx-ink);
+  transition: width 0.4s var(--sx-ease);
+}
+.sx-replay-player__count {
+  font-family: var(--sx-font-mono);
+  font-size: 0.78rem;
+  color: var(--sx-ink-soft);
+  margin-bottom: 1rem;
+}
+.sx-replay-player__done {
+  border: 1px solid var(--sx-line-strong);
+  border-radius: 1rem;
+  padding: 0.9rem 1.2rem;
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  background: var(--sx-paper-deep);
+  animation: sx-creditIn 0.5s var(--sx-ease) both;
+}
+.sx-replay-player__controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

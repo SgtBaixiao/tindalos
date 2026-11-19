@@ -1,5 +1,5 @@
 /**
- * SgtXLonelyHeartsClub site 类型 —— 站点自身领域类型。
+ * Tindalos site 类型 —— 站点自身领域类型。
  *
  * 与 lib/types.ts 的 CampaignView 结构兼容的 Campaign 在此独立声明一份
  * （刻意不 import 原文件，站点层自包含、不耦合工作台视图）。
@@ -167,6 +167,10 @@ export type EvalLayer = {
   claim_count?: number;
   supported?: number;
   support_ratio?: number;
+  total_claims?: number;
+  unevaluated?: number;
+  contradicted?: number;
+  unknown?: number;
   prior_total?: number;
   current_total?: number;
   delta?: number;
@@ -181,7 +185,7 @@ export type EvalRun = {
   campaign_title?: string;
   subject_type?: string;
   subject_ref?: string;
-  params?: { module_id?: string; max_usd?: number };
+  params?: { module_id?: string; max_usd?: number; revision?: number };
   layers?: Record<string, EvalLayer>;
   verdict?: string | null; // pass | warning | fail | error
   status?: string; // running | completed | short_circuited | error
@@ -196,6 +200,9 @@ export type EvalEvidenceRef = {
   module_id?: string;
   chunk_index?: number;
   score?: number;
+  quote?: string;
+  revision?: number;
+  origin?: string;
 };
 
 /** 单条标注（eval_annotations 行；GET /api/eval/runs/{id} → annotations）。 */
@@ -229,6 +236,7 @@ export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
 
 /** 单条记忆（memory_entries 行；字段宽松声明，缺失即不展示）。 */
 export type MemoryEntry = {
+  origin?: 'session' | 'planned';
   id: string;
   memory_type: MemoryType;
   content: string;

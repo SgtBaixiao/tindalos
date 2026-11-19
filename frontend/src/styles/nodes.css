@@ -10,36 +10,38 @@
   display: flex;
   flex-direction: column;
   min-height: 64px;
-  padding: 10px 12px 11px;
   background-color: var(--t-paper-deep);
   border: 1px solid var(--t-line);
-  border-radius: 10px;
-  box-shadow: var(--t-shadow-sm);
   font-family: var(--t-font-body);
   color: var(--t-ink);
   cursor: pointer;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px #262b2907;
+  padding: 13px 14px;
+  transition: border-color 140ms;
 }
 
-/* 悬停轻微上移 2px（house-style .lift 同款） */
+/* 悬停只改变边框，避免卡片位移 */
 .tn-node:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--t-shadow-md);
+  transform: none;
+  box-shadow: none;
+  border-color: var(--t-ink-faint);
 }
 
-/* 选中态 = 橙 2px 边框 + 抬升 */
+/* 选中态使用铜色 2px 外框 */
 .tn-node.is-selected {
-  box-shadow: 0 0 0 2px var(--t-orange), var(--t-shadow-md);
+  box-shadow: 0 0 0 2px var(--t-orange);
 }
 
 /* 左缘细强调条（hairline）：不切标题、克制；默认墨阶，类型各自覆色 */
 .tn-node__bar {
   position: absolute;
-  top: 10px;
-  bottom: 10px;
   left: 0;
-  width: 3px;
   border-radius: 0 3px 3px 0;
   background-color: var(--t-ink-faint);
+  width: 2px;
+  top: 13px;
+  bottom: 13px;
 }
 
 .tn-node__body {
@@ -50,21 +52,21 @@
 }
 
 .tn-node__title {
-  font-family: var(--t-font-display);
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--t-font-body);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .tn-node__roman {
-  font-family: var(--t-font-display);
-  font-size: 10px;
   color: var(--t-rule-red);
   letter-spacing: 0.18em;
+  font-family: var(--t-font-mono);
+  font-size: 9px;
 }
 
 .tn-node__meta {
@@ -82,6 +84,8 @@
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 2px;
+  max-height: 42px;
+  overflow: hidden;
 }
 
 /* --- 幕 Act：宽卡 + 墨强调条 --- */
@@ -112,32 +116,35 @@
   background-color: var(--t-verdigris);
 }
 
-/* --- NPC：墨蓝胶囊（区别于剧情节点矩形），含头像圈 --- */
+/* --- NPC：人物卡片，含头像 --- */
 .tn-node--npc {
   width: 200px;
   min-height: 56px;
   flex-direction: row;
   align-items: center;
   gap: 10px;
-  border-radius: 999px;
   border: 1px solid var(--t-inkblue);
   background-color: var(--t-paper-deep);
-  padding: 8px 16px 8px 10px;
+  border-radius: 5px;
+  border-color: var(--t-line);
+  padding: 11px 12px;
 }
 
 .tn-node__avatar {
   flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--t-paper);
   color: var(--t-ink-soft);
-  font-family: var(--t-font-display);
   font-size: 14px;
   border: 1px solid var(--t-ink-faint);
+  border-radius: 4px;
+  border-color: var(--t-line);
+  background: var(--t-oldpaper);
+  font-family: var(--t-font-display);
 }
 
 /* --- 线索 Clue：墨棕强调条 + 旧纸底（典籍感） --- */
@@ -166,10 +173,10 @@
   margin-top: 3px;
   font-size: 10px;
   line-height: 1.5;
-  border-radius: 999px;
   border: 1px solid var(--t-line);
   color: var(--t-ink-soft);
   background-color: var(--t-paper);
+  border-radius: 3px;
 }
 
 .tn-badge--done {
@@ -224,10 +231,10 @@
   padding: 1px 8px;
   font-size: 10px;
   font-family: var(--t-font-mono);
-  border-radius: 999px;
   background-color: var(--t-parchment);
   color: var(--t-sepia-ink);
   border: 1px solid var(--t-line);
+  border-radius: 3px;
 }
 .tn-chip--verdigris {
   background-color: transparent;

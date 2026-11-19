@@ -223,10 +223,8 @@ def test_store_facts_readable_by_new_instance(tmp_path):
 # ---------------------------------------------------------------- 7. 评审回归（G5）
 
 
-def test_default_checkpointer_creates_checkpoint_file(tmp_path):
-    """回归（G5 阻塞项）：build_pipeline 缺省 checkpointer 必须可编译——
-    不再对 @contextmanager 的 from_conn_string 调 next()（TypeError），
-    改为 sqlite3.connect + SqliteSaver(conn)；invoke 后 checkpoint 文件必须生成。"""
+def test_default_checkpointer_is_disposable_without_open_database(tmp_path):
+    """Default graph execution retains state without opening caller-unowned SQLite handles."""
     settings = make_settings(tmp_path)
     app = build_pipeline(settings=settings)  # 不注入 checkpointer
     result = app.invoke(
@@ -234,8 +232,8 @@ def test_default_checkpointer_creates_checkpoint_file(tmp_path):
         config={"configurable": {"thread_id": "t1"}},
     )
     cp_file = settings.checkpoint_dir / "checkpoints.sqlite"
-    assert cp_file.exists(), "缺省 checkpointer 应落盘 checkpoint 文件"
-    assert cp_file.stat().st_size > 0
+    assert not cp_file.exists()
+    assert app.get_state({'configurable': {'thread_id': 't1'}}).values['campaign'] is not None
     assert as_dict(result["campaign"])["id"] == campaign_id_for(MODULE_TEXT)
 
 

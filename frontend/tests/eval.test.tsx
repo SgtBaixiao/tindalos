@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, createElement } from 'react';
 import { SiteApp } from '../src/site/SiteApp';
-import { LOADING_MS } from '../src/site/Loading';
+import { navigateRoute, settleRoute } from './siteHarness';
 import type { EvalAnnotation, EvalRun } from '../src/site/types';
 
 // App 是 ReactFlow 工作台，jsdom 无 ResizeObserver → 轻量 mock。
@@ -44,6 +44,20 @@ const sampleRun: EvalRun = {
       },
       checks: [
         { id: 'chk-1', name: '结构：事件链完整', dims: ['structural'], passed: true },
+        {
+          id: 'density',
+          name: '平均每场景事件数 ≥2',
+          dims: ['depth'],
+          passed: true,
+          evidence: '平均每场景事件数 3.0 < 2',
+        },
+        {
+          id: 'branching',
+          name: '存在分支',
+          dims: ['playability'],
+          passed: false,
+          evidence: '没有任何事件存在 ≥2 条后续分支',
+        },
       ],
     },
     L2: { status: 'passed', problems: [] },
@@ -183,34 +197,16 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
-/** 设置 hash 并派发 hashchange（重复无害）。 */
 async function go(hash: string): Promise<void> {
-  window.location.hash = hash;
-  await act(async () => {
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-    await new Promise((r) => setTimeout(r, 0));
-  });
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
+  await navigateRoute(container, hash);
 }
 
-/** 快速启动：fake timers 走完 Loading，再切回真实 timers。 */
 async function bootFast(root: Root, fetchMock: ReturnType<typeof vi.fn>): Promise<void> {
   vi.stubGlobal('fetch', fetchMock);
   stubMatchMedia(false);
-  vi.useFakeTimers();
-  try {
-    act(() => {
-      root.render(createElement(SiteApp));
-    });
-    act(() => {
-      vi.advanceTimersByTime(LOADING_MS.done + 100);
-    });
-  } finally {
-    vi.useRealTimers();
-  }
-  expect(container.querySelector('.sx-loading')).toBeNull();
+  await act(async () => {
+    root.render(createElement(SiteApp));
+  });
   expect(rootContainer()).not.toBeNull();
 }
 
@@ -246,6 +242,7 @@ describe('评测列表', () => {
     await go('#/eval');
 
     expect(container.querySelector('[data-testid="sx-eval"]')).toBeTruthy();
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('eval');
     expect(container.textContent).toContain('雾港之夜');
     expect(container.textContent).toContain('孤岛回声');
@@ -268,6 +265,7 @@ describe('评测列表', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('eval-detail');
     expect(container.querySelector('[data-testid="sx-eval-detail"]')).toBeTruthy();
   });
@@ -279,6 +277,7 @@ describe('评测列表', () => {
       findButton(container, '评测').click();
       await new Promise((r) => setTimeout(r, 0));
     });
+    await settleRoute(container);
     expect(container.querySelector('.sx-site')!.getAttribute('data-route')).toBe('eval');
     expect(container.querySelector('[data-testid="sx-eval"]')).toBeTruthy();
   });
@@ -294,7 +293,9 @@ describe('评测详情', () => {
 
     expect(container.querySelector('[data-testid="sx-eval-detail"]')).toBeTruthy();
     // run 概要
-    expect(container.querySelector('[data-testid="eval-run-meta"]')!.textContent).toContain('detail-1');
+    expect(container.querySelector('[data-testid="eval-run-meta"]')!.textContent).toContain(
+      'detail-1',
+    );
     expect(container.textContent).toContain('雾港之夜');
     expect(container.textContent).toContain('$1.20');
     expect(container.textContent).toContain('3.2s');
@@ -310,6 +311,8 @@ describe('评测详情', () => {
     expect(container.textContent).toContain('结构性');
     expect(container.textContent).toContain('关键事件存在唯一前驱');
     expect(container.textContent).toContain('事件链完整');
+    expect(container.textContent).not.toContain('平均每场景事件数 3.0 < 2');
+    expect(container.textContent).toContain('没有任何事件存在 ≥2 条后续分支');
     // L2
     expect(container.textContent).toContain('无一致性问题');
     // L3：LLM 裁判 + comment / suggestion
@@ -318,7 +321,9 @@ describe('评测详情', () => {
     expect(container.textContent).toContain('建议：补充线索关联');
     expect(container.textContent).toContain('NPC 动机合理');
     // L4：声明支持比
-    expect(container.textContent).toContain('声明 3 条 · 支持 3 条 · 支持比 100%');
+    expect(container.textContent).toContain(
+      '已检查 3 条 · 支持 3 条 · 矛盾 0 条 · 未知 0 条 · 未检查 0 条 · 支持比 100%',
+    );
     // L5：仅人工
     expect(container.textContent).toContain('该层仅支持人工评测');
     // L6：回归对比

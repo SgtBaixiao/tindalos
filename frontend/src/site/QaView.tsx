@@ -1,3 +1,4 @@
+import './styles/qa.css';
 /**
  * site/QaView.tsx —— 规则问答：聊天式对话，question → qa() → 回答 + 来源卡片 + 模式徽标。
  */
@@ -5,13 +6,13 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { qa } from './api';
 import type { QaSource } from './types';
+import { PageHeader } from '../ui/PageHeader';
 
 type Message =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string; sources: QaSource[]; mode: 'llm' | 'local' };
 
-const PLACEHOLDER =
-  '例：使用「智力」检定成功需要掷出多少？目标数为多少？';
+const PLACEHOLDER = '例：使用「智力」检定成功需要掷出多少？目标数为多少？';
 
 export function QaView() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,6 +64,11 @@ export function QaView() {
 
   return (
     <section className="sx-qa" data-testid="sx-qa">
+      <PageHeader
+        eyebrow="03 / RULES & EVIDENCE"
+        title="规则问答"
+        description="提出具体问题，查阅回答所依据的原文。"
+      />
       <div className="sx-qa__chat" ref={chatRef}>
         {messages.length === 0 && (
           <p className="sx-qa__hint sx-empty">
@@ -78,10 +84,7 @@ export function QaView() {
             <div key={i} className="sx-bubble sx-bubble--assistant">
               {m.text}
               <div className="sx-qa__foot">
-                <span
-                  className={`sx-mode-badge sx-mode-badge--${m.mode}`}
-                  data-testid="qa-mode"
-                >
+                <span className={`sx-mode-badge sx-mode-badge--${m.mode}`} data-testid="qa-mode">
                   {m.mode === 'llm' ? 'LLM 回答' : '本地检索'}
                 </span>
                 {m.sources.length > 0 && (

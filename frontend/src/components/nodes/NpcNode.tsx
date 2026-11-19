@@ -7,7 +7,7 @@ function initials(name: string): string {
 }
 
 /**
- * NPC 节点：墨蓝胶囊（--t-inkblue）· 圆角胶囊（区别于剧情节点矩形）·
+ * NPC 节点：人物卡片（--t-inkblue）·
  * 头像圈 + 名字（展示字体）+ 人格词。
  */
 const NpcNode = memo(function NpcNode({ data, selected }: NodeProps) {

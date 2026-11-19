@@ -1,3 +1,7 @@
+import '../ui/cards.css';
+import './styles/memory.css';
+import { PageHeader } from '../ui/PageHeader';
+import { formatDateTime } from '../ui/format';
 /**
  * site/MemoryView.tsx —— 记忆可视化（#/memories/:campaignId）。
  *
@@ -105,7 +109,11 @@ export function MemoryView({ campaignId, navigate }: MemoryViewProps) {
   return (
     <section className="sx-memory" data-testid="sx-memory">
       <div className="sx-memory__nav">
-        <button type="button" className="sx-btn sx-btn--ghost" onClick={() => navigate('#/memories')}>
+        <button
+          type="button"
+          className="sx-btn sx-btn--ghost"
+          onClick={() => navigate('#/memories')}
+        >
           ← 记忆
         </button>
         <span className="sx-memory__campaign">#{campaignId}</span>
@@ -131,7 +139,13 @@ export function MemoryView({ campaignId, navigate }: MemoryViewProps) {
 
 /* ---------------------------------------------------------------- briefing */
 
-function BriefingCard({ campaignId, response }: { campaignId: string; response: MemoriesResponse }) {
+function BriefingCard({
+  campaignId,
+  response,
+}: {
+  campaignId: string;
+  response: MemoriesResponse;
+}) {
   const briefing = response.briefing?.trim();
   const playStatus = response.play_status;
 
@@ -145,9 +159,7 @@ function BriefingCard({ campaignId, response }: { campaignId: string; response: 
         {briefing ? (
           <p className="sx-briefing__text">{briefing}</p>
         ) : (
-          <p className="sx-empty">
-            该战役暂无游玩记录与长期记忆 —— 还没有「上次停在哪」可回叙。
-          </p>
+          <p className="sx-empty">该战役暂无游玩记录与长期记忆 —— 还没有「上次停在哪」可回叙。</p>
         )}
         <div className="sx-briefing__meta">
           {playStatus ? (
@@ -175,7 +187,8 @@ function PlotlineBlock({ longterm }: { longterm: MemoryEntry[] }) {
       <h2>剧情线状态</h2>
       {items.length === 0 ? (
         <p className="sx-empty" data-testid="plotline-empty">
-          暂无剧情线状态 —— 长期记忆整合（sleep-time consolidate）后，剧情概要 / 主线脉络会在此展示。
+          暂无剧情线状态 —— 长期记忆整合（sleep-time consolidate）后，剧情概要 /
+          主线脉络会在此展示。
         </p>
       ) : (
         <ul className="sx-plotline__list">
@@ -221,6 +234,9 @@ function MemoryPanel({ type, entries }: { type: MemoryType; entries: MemoryEntry
             <li key={entry.id} className="sx-mem-item">
               <span className="sx-mem-item__content">{entry.content}</span>
               <span className="sx-mem-item__meta">
+                <span>
+                  {entry.origin === 'session' ? '实际游玩记录' : '准备材料，尚未视作已发生'}
+                </span>
                 {entry.importance != null && (
                   <span>重要度 {Number(entry.importance).toFixed(2)}</span>
                 )}
@@ -241,7 +257,13 @@ function MemoryPanel({ type, entries }: { type: MemoryType; entries: MemoryEntry
 
 /* ---------------------------------------------------------------- 会话时间线 */
 
-function SessionsBlock({ sessions, error }: { sessions: PlaySession[] | null; error: string | null }) {
+function SessionsBlock({
+  sessions,
+  error,
+}: {
+  sessions: PlaySession[] | null;
+  error: string | null;
+}) {
   return (
     <div className="sx-memory__sessions" data-testid="memory-sessions">
       <h2>会话时间线</h2>
@@ -278,9 +300,7 @@ function SessionItem({ session }: { session: PlaySession }) {
           <span className="sx-badge sx-badge--status">{session.play_status}</span>
         )}
         {session.created_at && (
-          <span className="sx-session__date">
-            {session.created_at.replace('T', ' ').slice(0, 16)}
-          </span>
+          <span className="sx-session__date">{formatDateTime(session.created_at)}</span>
         )}
       </div>
       <p className="sx-session__summary">{session.summary}</p>
@@ -330,12 +350,11 @@ export function MemoryIndex({ navigate }: MemoryIndexProps) {
 
   return (
     <section className="sx-memory" data-testid="sx-memory-index">
-      <div className="sx-memory__head">
-        <h1 className="sx-memory__title">记忆</h1>
-        <p className="sx-memory__desc">
-          选择一场战役，查看它的四类记忆、剧情线状态与「上次停在哪」。
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="06 / CONTINUITY"
+        title="记忆"
+        description="选择一场战役，回看实际记录、确认事实与备团记忆。"
+      />
 
       {error && <p className="sx-error">{error}</p>}
 
@@ -355,7 +374,7 @@ export function MemoryIndex({ navigate }: MemoryIndexProps) {
               >
                 <span className="sx-card__title">{c.title}</span>
                 <span className="sx-card__meta">
-                  {c.created_at ?? ''}
+                  {formatDateTime(c.created_at)}
                   {c.acts_count != null ? ` · ${c.acts_count} 幕` : ''}
                 </span>
                 {c.premise && <span className="sx-card__desc">{c.premise}</span>}

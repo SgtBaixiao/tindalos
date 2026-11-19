@@ -18,7 +18,9 @@ const EventNode = memo(function EventNode({ data, selected }: NodeProps) {
         {d.conditions.length > 0 && (
           <div className="tn-node__conditions">
             {d.conditions.map((c, i) => (
-              <span key={i} className="tn-chip">{c}</span>
+              <span key={i} className="tn-chip">
+                {c}
+              </span>
             ))}
           </div>
         )}

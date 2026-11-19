@@ -204,6 +204,7 @@ def test_good_campaign_high_score():
     res = run_deterministic(good, world)
 
     assert all(c["passed"] for c in res["checks"])
+    assert all(not c["evidence"] for c in res["checks"])
     assert res["dims"]["structural"]["score"] == 5
     assert res["dims"]["consistency"]["score"] == 5
     assert res["dims"]["depth"]["score"] == 5

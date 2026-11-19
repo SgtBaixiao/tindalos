@@ -4,10 +4,10 @@
  * 规则（确定性，供测试断言）：
  *
  * 节点（五类）：
- *  - act   ：每个 act 一个节点（红粗顶条）
- *  - scene ：每个 scene 一个节点（橙顶条）
+ *  - act   ：每个 act 一个节点（铜色标记）
+ *  - scene ：每个 scene 一个节点（铜色侧边）
  *  - event ：每个 event 一个节点（铜锈绿虚线框）
- *  - npc   ：npcs 字典每个成员一个节点（墨蓝胶囊）
+ *  - npc   ：npcs 字典每个成员一个节点（人物卡片）
  *  - clue  ：每个 clue 一个节点
  *
  * 边（三类）：
@@ -122,6 +122,9 @@ function npcNodes(campaign: CampaignView): GraphNode[] {
       archetype: npc.archetype ?? '佚名角色',
       personality: npc.personality ?? [],
       description: npc.description ?? '',
+      goals: npc.goals ?? [],
+      knowledge: npc.knowledge ?? [],
+      resources: npc.resources ?? [],
     },
   }));
 }
@@ -134,6 +137,11 @@ function clueNodes(campaign: CampaignView): GraphNode[] {
     data: {
       name: clue.name,
       description: clue.description ?? '',
+      conclusions: clue.conclusions ?? [],
+      acquisition_conditions: clue.acquisition_conditions ?? [],
+      alternatives: clue.alternatives ?? [],
+      source_refs: clue.source_refs ?? [],
+      origin: clue.origin ?? 'proposal',
     },
   }));
 }
@@ -179,7 +187,12 @@ export function buildScriptGraph(campaign: CampaignView): {
             addEdge('flow', ev.id, nextId); // 主线推进
           } else {
             const condition = ev.conditions?.[idx - 1];
-            addEdge('branch', ev.id, nextId, condition && condition.length > 0 ? condition : '分支');
+            addEdge(
+              'branch',
+              ev.id,
+              nextId,
+              condition && condition.length > 0 ? condition : '分支',
+            );
           }
         });
       }
@@ -195,6 +208,7 @@ export function buildScriptGraph(campaign: CampaignView): {
   nodes.push(...npcNodes(campaign), ...clueNodes(campaign));
 
   // 引用：NPC → 线索（linked_npc_ids）、事件 → 线索（linked_event_ids）
+  const nodeIds = new Set(nodes.map((n) => n.id));
   for (const clue of campaign.clues) {
     for (const npcId of clue.linked_npc_ids ?? []) {
       if (npcId in campaign.npcs) {
@@ -202,7 +216,7 @@ export function buildScriptGraph(campaign: CampaignView): {
       }
     }
     for (const evId of clue.linked_event_ids ?? []) {
-      if (nodes.some((n) => n.id === evId)) {
+      if (nodeIds.has(evId)) {
         addEdge('reference', evId, clue.id, '线索');
       }
     }
@@ -251,9 +265,5 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[]
 
 /** 布局后坐标健康检查：全节点位置有限（无 NaN/Infinity）。 */
 export function positionsAreFinite(nodes: GraphNode[]): boolean {
-  return nodes.every(
-    (n) =>
-      Number.isFinite(n.position.x) &&
-      Number.isFinite(n.position.y),
-  );
+  return nodes.every((n) => Number.isFinite(n.position.x) && Number.isFinite(n.position.y));
 }

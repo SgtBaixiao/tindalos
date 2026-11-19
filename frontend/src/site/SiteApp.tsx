@@ -1,116 +1,174 @@
-/**
- * site/SiteApp.tsx —— 站点外壳 + hash 路由。
- *
- * 路由表：
- *  - #/                        首页（四栏目入口）
- *  - #/workbench               剧本工作台（内嵌 App）
- *  - #/library                 模组资料库
- *  - #/qa                      规则问答
- *  - #/history                 历史记录
- *  - #/history/<campaignId>    剧本重放
- *  - #/eval                    评测列表
- *  - #/eval/<runId>            评测详情（L1..L6 trace + 标注）
- *  - #/memories                记忆索引（选择战役）
- *  - #/memories/<campaignId>   记忆详情（briefing + 剧情线 + 四类记忆 + 会话时间线）
- *
- * 首次挂载显示 Loading（品牌词升起 → 坠落淡出），随后进入首页。
- * 不依赖 react-router：window.location.hash + hashchange。
- */
-
-import { useEffect, useState } from 'react';
+import { Component, Suspense, lazy, type ReactNode } from 'react';
 import { useHashRoute } from './router';
-import { Loading } from './Loading';
 import { Home } from './Home';
-import { WorkbenchView } from './WorkbenchView';
-import { LibraryView } from './LibraryView';
-import { QaView } from './QaView';
-import { HistoryView } from './HistoryView';
-import { ReplayView } from './ReplayView';
-import { EvalView } from './EvalView';
-import { EvalDetailView } from './EvalDetailView';
-import { MemoryIndex, MemoryView } from './MemoryView';
+import { NAVIGATION } from './navigation';
+import { Icon } from '../ui/Icon';
+import { useTheme } from '../ui/theme';
 
-const ROUTE_TITLES: Record<string, string> = {
-  workbench: '剧本工作台',
-  library: '模组资料库',
-  qa: '规则问答',
-  history: '历史记录',
-  replay: '剧本重放',
-  eval: '评测',
-  'eval-detail': '评测详情',
-  memories: '记忆',
-};
+const Workbench = lazy(() => import('./WorkbenchView').then((m) => ({ default: m.WorkbenchView })));
+const Library = lazy(() => import('./LibraryView').then((m) => ({ default: m.LibraryView })));
+const Qa = lazy(() => import('./QaView').then((m) => ({ default: m.QaView })));
+const History = lazy(() => import('./HistoryView').then((m) => ({ default: m.HistoryView })));
+const Replay = lazy(() => import('./ReplayView').then((m) => ({ default: m.ReplayView })));
+const Eval = lazy(() => import('./EvalView').then((m) => ({ default: m.EvalView })));
+const EvalDetail = lazy(() =>
+  import('./EvalDetailView').then((m) => ({ default: m.EvalDetailView })),
+);
+const Memories = lazy(() => import('./MemoryView').then((m) => ({ default: m.MemoryIndex })));
+const Memory = lazy(() => import('./MemoryView').then((m) => ({ default: m.MemoryView })));
 
-export function SiteApp() {
-  const [booted, setBooted] = useState(false);
-  const { segments, route, navigate } = useHashRoute();
-
-  // 站点皮肤主题：未设置时默认纸白，并兼容现有 data-theme 机制
-  useEffect(() => {
-    if (!document.documentElement.dataset.theme) {
-      document.documentElement.dataset.theme = 'light';
-    }
-  }, []);
-
-  const isReplay = route === 'history' && segments.length >= 2;
-  const isEvalDetail = route === 'eval' && segments.length >= 2;
-  const isMemoriesDetail = route === 'memories' && segments.length >= 2;
-  const viewRoute = isReplay ? 'replay' : isEvalDetail ? 'eval-detail' : route;
-  const title = ROUTE_TITLES[viewRoute];
-
-  let view: React.ReactNode;
-  if (route === 'workbench') {
-    view = <WorkbenchView />;
-  } else if (route === 'library') {
-    view = <LibraryView />;
-  } else if (route === 'qa') {
-    view = <QaView />;
-  } else if (route === 'history' && isReplay) {
-    view = <ReplayView campaignId={segments[1]} navigate={navigate} />;
-  } else if (route === 'history') {
-    view = <HistoryView navigate={navigate} />;
-  } else if (route === 'eval' && isEvalDetail) {
-    view = <EvalDetailView runId={segments[1]} navigate={navigate} />;
-  } else if (route === 'eval') {
-    view = <EvalView navigate={navigate} />;
-  } else if (route === 'memories' && isMemoriesDetail) {
-    view = <MemoryView campaignId={segments[1]} navigate={navigate} />;
-  } else if (route === 'memories') {
-    view = <MemoryIndex navigate={navigate} />;
-  } else {
-    view = <Home navigate={navigate} />;
+class RouteBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
   }
-
+  render() {
+    if (this.state.failed)
+      return (
+        <div className="sx-route-error" role="alert">
+          <h2>页面暂时无法打开</h2>
+          <p>重新载入以取得当前版本。</p>
+          <button className="sx-btn" onClick={() => window.location.reload()}>
+            重新载入
+          </button>
+        </div>
+      );
+    return this.props.children;
+  }
+}
+export function SiteApp() {
+  const { segments, route, navigate } = useHashRoute();
+  const [theme, toggleTheme] = useTheme();
+  const detail = segments.length > 1;
+  const viewRoute =
+    route === 'history' && detail ? 'replay' : route === 'eval' && detail ? 'eval-detail' : route;
+  const title =
+    viewRoute === 'replay'
+      ? '剧本重放'
+      : viewRoute === 'eval-detail'
+        ? '评测详情'
+        : (NAVIGATION.find((n) => n.route === route)?.title ?? '档案首页');
+  let view: ReactNode;
+  switch (route) {
+    case 'workbench':
+      view = <Workbench />;
+      break;
+    case 'library':
+      view = <Library />;
+      break;
+    case 'qa':
+      view = <Qa />;
+      break;
+    case 'history':
+      view = detail ? (
+        <Replay campaignId={segments[1]} navigate={navigate} />
+      ) : (
+        <History navigate={navigate} />
+      );
+      break;
+    case 'eval':
+      view = detail ? (
+        <EvalDetail runId={segments[1]} navigate={navigate} />
+      ) : (
+        <Eval navigate={navigate} />
+      );
+      break;
+    case 'memories':
+      view = detail ? (
+        <Memory campaignId={segments[1]} navigate={navigate} />
+      ) : (
+        <Memories navigate={navigate} />
+      );
+      break;
+    default:
+      view = <Home navigate={navigate} />;
+  }
+  const links = NAVIGATION.map((n) => (
+    <a
+      key={n.route}
+      href={`#/${n.route}`}
+      aria-current={route === n.route ? 'page' : undefined}
+      className="sx-sidebar__link"
+    >
+      <Icon name={n.icon} />
+      <span>{n.title}</span>
+    </a>
+  ));
   return (
     <div className="sx-site" data-route={viewRoute} data-testid="sx-site">
-      {!booted && <Loading onDone={() => setBooted(true)} />}
-
+      <a
+        href="#main-content"
+        className="sx-skip"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
+        跳到主要内容
+      </a>
+      <aside className="sx-sidebar">
+        <button className="sx-sidebar__brand" onClick={() => navigate('#/')} aria-label="返回首页">
+          <Icon name="compass" />
+          <strong>Tindalos</strong>
+          <small>THE KEEPER'S ARCHIVE</small>
+        </button>
+        <p className="sx-sidebar__section">YOUR FIELD NOTES</p>
+        <nav aria-label="主导航">{links}</nav>
+        <div className="sx-sidebar__foot">
+          <span className="sx-sidebar__dot" />
+          个人备团档案<p>每个选择，都有迹可循。</p>
+        </div>
+      </aside>
       <header className="sx-topbar">
-        <button
-          type="button"
-          className="sx-topbar__brand"
-          onClick={() => navigate('#/')}
-          aria-label="返回首页"
-        >
-          SgtXLonelyHeartsClub
+        <button className="sx-topbar__brand" onClick={() => navigate('#/')} aria-label="返回首页">
+          Tindalos
         </button>
         <div className="sx-topbar__crumb">
+          <span className="sx-topbar__edition">T / FIELDWORK</span>
           <span className="sx-topbar__title" data-testid="route-title">
-            {title ?? ''}
+            {title}
           </span>
+        </div>
+        <div className="sx-topbar__actions">
           {route !== 'home' && (
-            <button
-              type="button"
-              className="sx-topbar__back"
-              onClick={() => navigate('#/')}
-            >
+            <button className="sx-topbar__back" onClick={() => navigate('#/')}>
               回首页
             </button>
           )}
+          <button
+            className="sx-theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === 'light' ? '切换深色主题' : '切换浅色主题'}
+          >
+            <Icon name={theme === 'light' ? 'moon' : 'sun'} />
+          </button>
         </div>
       </header>
-
-      <main className="sx-content">{view}</main>
+      <nav className="sx-mobile-nav" aria-label="栏目导航">
+        {NAVIGATION.map((n) => (
+          <a
+            key={n.route}
+            href={`#/${n.route}`}
+            aria-current={route === n.route ? 'page' : undefined}
+          >
+            {n.short}
+          </a>
+        ))}
+      </nav>
+      <main className="sx-content" id="main-content" tabIndex={-1}>
+        <RouteBoundary key={segments.join('/')}>
+          <Suspense
+            fallback={
+              <div className="sx-route-loading" role="status">
+                <span />
+                正在打开{title}…
+              </div>
+            }
+          >
+            {view}
+          </Suspense>
+        </RouteBoundary>
+      </main>
     </div>
   );
 }

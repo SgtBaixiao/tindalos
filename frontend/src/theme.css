@@ -1,155 +1,142 @@
-/* ============================================================
- * Tindalos theme.css —— 暖色极简 × 克苏鲁克制氛围
- * 基座：house-style（米白 + 橙 + 红分割线）；克苏鲁扩展：铜锈绿 + 墨蓝 + 旧纸
- * 对应 tindalos-ui-design.md §2.1（--t-* 令牌）/ §3.2（--xy-* 变量）/ §0.4（暖墨深色板）
- * ============================================================ */
-
+/* Shared design tokens. Both the site and graph resolve to this palette. */
 :root {
-  /* --- 继承 house-style（基座，不改值） --- */
-  --t-paper: #faf6ef;          /* 米白底 */
-  --t-paper-deep: #f3ede1;     /* 卡片/交替区 */
-  --t-ink: #2b2620;            /* 暖黑正文 */
-  --t-ink-soft: #5c5345;
-  --t-ink-faint: #8a7f6d;
-  --t-orange: #e8620c;         /* 主强调 */
-  --t-orange-deep: #c2410c;
-  --t-rule-red: #d64545;       /* 分割线/戏剧色 */
-  --t-line: #e5dcc8;
-
-  /* --- 克苏鲁扩展（新） --- */
-  --t-oldpaper: #ede0c2;       /* 泛黄旧纸（典籍卡/引用底） */
-  --t-parchment: #e4d3ae;      /* 羊皮纸深一档 */
-  --t-verdigris: #6b7a55;      /* 铜锈绿（信息/环境/NPC 关联） */
-  --t-verdigris-deep: #54603f;
-  --t-inkblue: #3e4a5a;        /* 墨蓝（链接/暗色典籍文字） */
-  --t-sepia-ink: #4a3b28;      /* 墨棕（典籍正文/打字机片段） */
-
-  /* --- 阴影（暖黑着色，非冷灰） --- */
-  --t-shadow-sm: 0 1px 3px rgba(43, 38, 32, 0.08);
-  --t-shadow-md: 0 4px 14px rgba(43, 38, 32, 0.12);
-  --t-shadow-lg: 0 8px 28px rgba(43, 38, 32, 0.18);
-
-  /* --- 字体 --- */
-  --t-font-display: 'ITC Avant Garde Gothic', 'Century Gothic', 'Poppins', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --t-font-body: Inter, 'MiSans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --t-font-mono: 'Courier Prime', 'IBM Plex Mono', ui-monospace, Consolas, 'Courier New', monospace;
-
-  /* --- 纸纹噪点 data-uri（house-style feTurbulence 实现，低 alpha） --- */
-  --t-paper-texture: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-
-  --t-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --t-paper: #f5f1e8;
+  --t-paper-deep: #fffdf7;
+  --t-ink: #262b29;
+  --t-ink-soft: #62665d;
+  --t-ink-faint: #7b7c70;
+  --t-orange: #a6472c;
+  --t-orange-deep: #893620;
+  --t-rule-red: #a6472c;
+  --t-line: #d8d7c9;
+  --t-oldpaper: #ebe7d8;
+  --t-parchment: #e1dbc8;
+  --t-verdigris: #587267;
+  --t-verdigris-deep: #3d5e50;
+  --t-inkblue: #536a78;
+  --t-sepia-ink: #786343;
+  --t-font-display:
+    'Iowan Old Style', 'Baskerville', 'Songti SC', 'Noto Serif CJK SC', Georgia, serif;
+  --t-font-body:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --t-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --t-shadow-sm: 0 2px 5px #262b2908;
+  --t-shadow-md: 0 5px 18px #262b2912;
+  --t-shadow-lg: 0 15px 45px #262b2920;
+  --t-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-radius: 6px;
+  --sx-paper: var(--t-paper);
+  --sx-paper-deep: var(--t-paper-deep);
+  --sx-ink: var(--t-ink);
+  --sx-ink-soft: var(--t-ink-soft);
+  --sx-ink-faint: var(--t-ink-faint);
+  --sx-line: var(--t-line);
+  --sx-line-strong: #a9afa1;
+  --sx-surface: var(--t-oldpaper);
+  --sx-surface-2: var(--t-parchment);
+  --sx-shadow: #262b2912;
+  --sx-shadow-strong: #262b2929;
+  --sx-blue: var(--t-inkblue);
+  --sx-green: var(--t-verdigris-deep);
+  --sx-red: var(--t-orange);
+  --sx-purple: var(--t-sepia-ink);
+  --sx-pink: var(--t-orange);
+  --sx-font-body: var(--t-font-body);
+  --sx-font-mono: var(--t-font-mono);
+  --sx-ease: var(--t-ease);
+  --sx-ease-drawer: var(--t-ease);
+  --sx-ease-fall: var(--t-ease);
 }
-
-/* --- 暖墨深色板（Tindalos 个性决策：深棕书房夜灯感，非 Kimi 蓝黑） --- */
 [data-theme='dark'] {
-  --t-paper: #1e1a15;
-  --t-paper-deep: #27211a;
-  --t-ink: #ede4d4;
-  --t-ink-soft: #b7a98f;
-  --t-ink-faint: #7e725c;
-  --t-orange: #ff8a3d;
-  --t-orange-deep: #ffa45c;
-  --t-rule-red: #e86a5c;
-  --t-line: #352d22;
-  --t-oldpaper: #2a241b;
-  --t-parchment: #322a1f;
-  --t-verdigris: #8fa377;
-  --t-verdigris-deep: #a8b98c;
-  --t-inkblue: #8ca0bc;
-  --t-sepia-ink: #d8c3a0;
-  --t-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --t-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
-  --t-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+  --t-paper: #202623;
+  --t-paper-deep: #2a302b;
+  --t-ink: #edeadf;
+  --t-ink-soft: #b9bcae;
+  --t-ink-faint: #a3a998;
+  --t-orange: #e8a07e;
+  --t-orange-deep: #f0b294;
+  --t-rule-red: #e8a07e;
+  --t-line: #424a3e;
+  --t-oldpaper: #32382f;
+  --t-parchment: #3c4236;
+  --t-verdigris: #9cb8a5;
+  --t-verdigris-deep: #a6c5b0;
+  --t-inkblue: #a1b7c2;
+  --t-sepia-ink: #cfb786;
+  --sx-line-strong: #66705e;
 }
-
-/* ============================================================
- * 基础
- * ============================================================ */
 * {
   box-sizing: border-box;
 }
-
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
 }
-
 body {
-  background-color: var(--t-paper);
+  background: var(--t-paper);
   color: var(--t-ink);
-  font-family: var(--t-font-body);
-  transition: background-color 0.2s var(--t-ease), color 0.2s var(--t-ease);
+  font: 14px/1.6 var(--t-font-body);
+  -webkit-font-smoothing: antialiased;
 }
-
-/* ============================================================
- * 应用骨架
- * ============================================================ */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+a {
+  color: inherit;
+}
+::selection {
+  background: #a6472c30;
+}
+:focus-visible {
+  outline: 2px solid var(--t-orange);
+  outline-offset: 4px;
+}
 .tn-app {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-
 .tn-canvas {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-
-/* 画布纸纹（低 alpha 噪点） */
 .tn-canvas .react-flow {
-  background-color: var(--t-paper);
+  background: var(--t-paper);
 }
-
-/* ============================================================
- * React Flow 主题接管（§3.2 --xy-* 变量，reactflow.dev 已验证默认值）
- * ============================================================ */
 .react-flow {
   --xy-node-background-color-default: var(--t-paper-deep);
   --xy-node-border-default: 1px solid var(--t-line);
-  --xy-node-boxshadow-hover-default: var(--t-shadow-sm);
-  --xy-node-boxshadow-selected-default: 0 0 0 2px var(--t-orange), var(--t-shadow-md);
   --xy-edge-stroke-default: var(--t-ink-faint);
   --xy-edge-stroke-selected-default: var(--t-orange);
   --xy-connectionline-stroke-default: var(--t-orange);
-  --xy-handle-background-color-default: var(--t-orange-deep);
+  --xy-handle-background-color-default: var(--t-orange);
   --xy-handle-border-color-default: var(--t-paper);
-  /* 选区/网格跟随 --t-ink 墨阶（嵌入站点后自动呈纸墨语言） */
-  --xy-selection-background-color-default: color-mix(in srgb, var(--t-ink) 8%, transparent);
-  --xy-selection-border-default: 1px dotted color-mix(in srgb, var(--t-ink) 55%, transparent);
-  --xy-minimap-background-color-default: var(--t-oldpaper);
-  --xy-background-pattern-dots-color-default: color-mix(in srgb, var(--t-ink) 14%, transparent);
+  --xy-selection-background-color-default: #a6472c15;
+  --xy-selection-border-default: 1px dotted var(--t-orange);
+  --xy-minimap-background-color-default: var(--t-paper-deep);
+  --xy-background-pattern-dots-color-default: var(--t-line);
   --xy-controls-button-background-color-default: var(--t-paper-deep);
   --xy-controls-button-background-color-hover-default: var(--t-oldpaper);
   --xy-controls-button-border-color-default: var(--t-line);
   --xy-controls-button-color-default: var(--t-ink);
-  --xy-minimap-mask-background-color-default: color-mix(in srgb, var(--t-ink) 6%, transparent);
-  --xy-minimap-node-stroke-color-default: transparent;
   --xy-attribution-background-color-default: transparent;
   --xy-attribution-color-default: var(--t-ink-faint);
   color: var(--t-ink);
-  font-family: var(--t-font-body);
 }
-
-/* 深色下 dot 网格降对比、attribution 隐藏弱化 */
-.react-flow.dark {
-  --xy-background-pattern-dots-color-default: color-mix(in srgb, var(--t-ink) 10%, transparent);
-  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.3);
-}
-
-/* ============================================================
- * 动效铁律（house-style）：≤300ms / 统一缓动 / reduced-motion 直接可见
- * ============================================================ */
-.tn-node,
-.tn-drawer,
-.tn-progress,
-.tn-btn {
-  transition: box-shadow 0.2s var(--t-ease), transform 0.2s var(--t-ease), background-color 0.2s var(--t-ease), border-color 0.2s var(--t-ease);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -157,5 +144,6 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

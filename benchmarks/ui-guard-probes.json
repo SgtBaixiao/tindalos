@@ -1,0 +1,22 @@
+[
+  {
+    "probe": "direction",
+    "exit_code": 1,
+    "detected": "forbidden dependency"
+  },
+  {
+    "probe": "cycle",
+    "exit_code": 1,
+    "detected": "Runtime cycle"
+  },
+  {
+    "probe": "eager",
+    "exit_code": 1,
+    "detected": "eagerly imports"
+  },
+  {
+    "probe": "entry exceeds budget",
+    "exit_code": 1,
+    "detected": "exceeds 230000"
+  }
+]

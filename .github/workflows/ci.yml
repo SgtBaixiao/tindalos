@@ -15,12 +15,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.9"
+          enable-cache: true
       - name: Install
         run: |
-          pip install -e ".[dev,llm,web]"
+          uv sync --locked --all-extras
       - name: Test
-        run: python -m pytest tests/ -q
+        run: uv run --locked --all-extras python -m pytest tests/ -q
 
   frontend:
     name: frontend (vitest + build)
@@ -33,15 +36,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Unit tests
         run: npx vitest run --reporter=dot
+      - name: Format and module checks
+        run: |
+          npm run format:check
+          npm run check:modules
       - name: Build
         run: npm run build
+      - name: Entry bundle budget
+        run: npm run check:bundle
       - name: Verify dist
         run: test -d dist && test -f dist/index.html && echo "dist OK"
 
@@ -55,7 +64,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install -e ".[dev,llm]"
+        run: pip install uv==0.13.9 && uv sync --locked --extra dev --extra llm
+      - name: Activate environment
+        run: echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Generate (离线确定性)
         run: tindalos generate examples/sample-module.md --out /tmp/c.json && test -s /tmp/c.json
       - name: Eval (stdout 纯 JSON 含 4 维)

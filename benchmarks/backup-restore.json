@@ -1,0 +1,53 @@
+{
+  "source": ".local-preserved/refactor-backup-20261119",
+  "method": "copy complete stopped-state backup into a temporary directory; readonly SQLite integrity and row counts",
+  "databases": [
+    {
+      "path": "rag/chroma.sqlite3",
+      "integrity": "ok",
+      "tables": 21,
+      "rows": {
+        "migrations": 18,
+        "acquire_write": 2,
+        "collection_metadata": 1,
+        "segment_metadata": 0,
+        "tenants": 1,
+        "databases": 1,
+        "collections": 1,
+        "maintenance_log": 0,
+        "segments": 2,
+        "embeddings": 0,
+        "embedding_metadata": 0,
+        "max_seq_id": 0,
+        "embedding_fulltext_search": 0,
+        "embedding_fulltext_search_data": 2,
+        "embedding_fulltext_search_idx": 0,
+        "embedding_fulltext_search_content": 0,
+        "embedding_fulltext_search_docsize": 0,
+        "embedding_fulltext_search_config": 1,
+        "embedding_metadata_array": 0,
+        "embeddings_queue": 0,
+        "embeddings_queue_config": 1
+      }
+    },
+    {
+      "path": "store/memory_entries.sqlite",
+      "integrity": "ok",
+      "tables": 3,
+      "rows": {
+        "memory_entries": 57,
+        "play_sessions": 0,
+        "session_facts": 0
+      }
+    },
+    {
+      "path": "store/memory.sqlite",
+      "integrity": "ok",
+      "tables": 2,
+      "rows": {
+        "store_migrations": 5,
+        "store": 8
+      }
+    }
+  ]
+}

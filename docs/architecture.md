@@ -1,5 +1,7 @@
 # Tindalos 模块架构设计（MVP）
 
+本文保留早期 MVP 设计，当前实现以[运行架构](runtime-architecture.md)和[决策日志](refactor-decision-log.md)为准。旧文中的默认持久检查点、分支指标和实现状态需要按新记录理解。
+
 > 状态：G1/G2 通过；为 inline 管线各 worker 的实现依据，也是面试可深讲的架构文档。
 > 术语一律遵循 `CONTEXT.md`（由 t2 产出）词汇表：KP 主控 / NPC subagent / 幕 Act / 场景 Scene / 事件 Event / 线索 Clue / 世界知识图谱 / 备团笔记 / 分幕创作 / 剧本节点图。禁止新造同义词。
 

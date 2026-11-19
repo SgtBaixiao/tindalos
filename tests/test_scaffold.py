@@ -25,9 +25,11 @@ def test_version():
     assert tindalos.__version__ == "0.1.0"
 
 
-def test_settings_defaults():
+def test_settings_defaults(monkeypatch):
     """验收：config 默认值断言——llm_enabled False、base_url 默认。"""
     config_module._settings = None  # 重置单例，保证按当前环境构造
+    for key in ('TINDALOS_DATA_DIR','TINDALOS_CHECKPOINT_DIR','TINDALOS_STORE_DIR'):
+        monkeypatch.delenv(key, raising=False)
     s = config_module.get_settings()
     assert s.llm_enabled is False
     assert s.ollama_base_url == "http://localhost:11434/v1"

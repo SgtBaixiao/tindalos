@@ -1,3 +1,6 @@
+import './styles/eval.css';
+import { PageHeader } from '../ui/PageHeader';
+import { formatDateTime } from '../ui/format';
 /**
  * site/EvalView.tsx —— 评测列表页。
  *
@@ -36,12 +39,11 @@ export function EvalView({ navigate }: EvalViewProps) {
 
   return (
     <section className="sx-eval" data-testid="sx-eval">
-      <div className="sx-eval__head">
-        <h1 className="sx-eval__title">评测</h1>
-        <p className="sx-eval__desc">
-          六层评测 trace：L1 结构确定性 → L2 图谱一致性 → L3 内容质量 → L4 忠实度 → L5 KP 可用性 → L6 回归。
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="05 / REVIEW & ADOPTION"
+        title="评测"
+        description="检查剧本修订的结构、内容与来源，留下自己的使用判断。"
+      />
 
       {error && (
         <p className="sx-error" data-testid="eval-error">
@@ -53,7 +55,7 @@ export function EvalView({ navigate }: EvalViewProps) {
         <p className="sx-empty">载入中…</p>
       ) : runs.length === 0 ? (
         <p className="sx-empty" data-testid="eval-empty">
-          还没有评测记录 —— 在剧本工作台生成后运行一次评测即可看到 trace。
+          还没有评测记录。在剧本工作台打开已保存剧本，即可评测当前版本。
         </p>
       ) : (
         <ul className="sx-eval-list">
@@ -77,7 +79,7 @@ export function EvalView({ navigate }: EvalViewProps) {
                   <span className={`sx-badge sx-badge--status is-${run.status ?? 'none'}`}>
                     {runStatusLabel(run.status)}
                   </span>
-                  {run.created_at ? run.created_at.replace('T', ' ').slice(0, 19) : ''}
+                  {formatDateTime(run.created_at)}
                 </span>
                 <span className="sx-eval-card__meta">
                   {formatUsd(run.budget_spent_usd)} · {formatDuration(run.duration_ms)}

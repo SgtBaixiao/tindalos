@@ -21,7 +21,7 @@ import fitz
 import pypdfium2 as pdfium
 import pytest
 from PIL import Image
-from pypdfium2 import _helpers as h
+import pypdfium2 as h
 
 from tindalos.pdfio import (
     PdfImageInfo,

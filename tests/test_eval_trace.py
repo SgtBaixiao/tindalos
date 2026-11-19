@@ -241,7 +241,7 @@ def test_good_campaign_full_green_zero_llm(tmp_path):
 
     tr = run_eval(good, settings=settings, search_fn=_empty_search, db_path=db)
 
-    assert tr["verdict"] == "pass"
+    assert tr["verdict"] == "warning"
     assert tr["status"] == "completed"
     assert tr["llm_calls"] == 0
     assert tr["budget"]["spent_usd"] == 0.0
@@ -257,7 +257,7 @@ def test_good_campaign_full_green_zero_llm(tmp_path):
     # trace 落盘可回放：同一 run_id 从库中读出终态
     stored = eval_store.get_run(tr["run_id"], db_path=db)
     assert stored["status"] == "completed"
-    assert stored["verdict"] == "pass"
+    assert stored["verdict"] == "warning"
     assert stored["layers"]["L2"]["status"] == "passed"
 
 
@@ -317,7 +317,7 @@ def test_replay_l6_no_regression(tmp_path):
     assert tr2["layers"]["L6"]["status"] == "passed"
     assert tr2["layers"]["L6"]["regression"] is False
     assert tr2["layers"]["L6"]["delta"] == 0.0
-    assert tr2["verdict"] == "pass"
+    assert tr2["verdict"] == "warning"
 
 
 def test_l6_regression_warns(tmp_path):
@@ -362,7 +362,7 @@ def test_budget_gate_skips_l3_before_llm(tmp_path):
     assert tr["llm_calls"] == 0
     assert tr["layers"]["L3"]["reason"] == "budget_exceeded"
     assert tr["layers"]["L3"]["estimate_usd"] > 0
-    assert tr["verdict"] == "pass"                          # L3 skip 不降 verdict
+    assert tr["verdict"] == "warning"                          # L3 skip 不降 verdict
 
 
 # --------------------------------------------------------------------------- #
@@ -382,7 +382,7 @@ def test_l3_llm_judge_participates_when_enabled(tmp_path):
     assert tr["layers"]["L3"]["judge"] == "llm"
     assert tr["layers"]["L3"]["dims"]["structural"]["score"] == 4
     assert tr["budget"]["spent_usd"] == tr["budget"]["estimate_usd"]
-    assert tr["verdict"] == "pass"
+    assert tr["verdict"] == "warning"
 
 
 # --------------------------------------------------------------------------- #
@@ -406,7 +406,7 @@ def test_l4_faithfulness_supported(tmp_path):
     assert l4["status"] == "passed"
     assert l4["support_ratio"] == 1.0
     assert l4["claim_count"] >= 1
-    assert tr["verdict"] == "pass"
+    assert tr["verdict"] == "warning"
     assert len(tr["annotations"]) == l4["claim_count"]       # 逐 claim 落标注
     assert eval_store.list_annotations(tr["run_id"], db_path=db)  # annotations 持久化
 
@@ -455,7 +455,7 @@ def test_run_eval_accepts_dict_snapshot(tmp_path):
 
     tr = run_eval(raw, settings=settings, search_fn=_empty_search, db_path=db)
 
-    assert tr["verdict"] == "pass"
+    assert tr["verdict"] == "warning"
     assert tr["status"] == "completed"
     assert tr["layers"]["L2"]["problems"] == []
     assert tr["campaign_id"] == "good-1"

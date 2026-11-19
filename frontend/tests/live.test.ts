@@ -167,7 +167,9 @@ describe('SseStreamParser（分块缓冲，截断续接）', () => {
   it('半帧累积，完整帧逐条吐出，多帧一冲', () => {
     const parser = new SseStreamParser();
     expect(parser.push('data:{"stage":"plan",')).toEqual([]);
-    expect(parser.push('"message":"拟定幕结构"}\n\ndata:{"done":true,"campaign":null}\n\n')).toEqual([
+    expect(
+      parser.push('"message":"拟定幕结构"}\n\ndata:{"done":true,"campaign":null}\n\n'),
+    ).toEqual([
       { kind: 'progress', stage: 'plan', message: '拟定幕结构' },
       { kind: 'done', campaign: null },
     ]);
@@ -186,7 +188,11 @@ describe('SseStreamParser（分块缓冲，截断续接）', () => {
 
 describe('sseToProgressEvent（SSE 帧 → 进度事件）', () => {
   it('npc stage → agent=npc + 提取 NPC 名', () => {
-    const ev = sseToProgressEvent({ kind: 'progress', stage: 'npc', message: 'NPC 顾长歌 · 注入人格' });
+    const ev = sseToProgressEvent({
+      kind: 'progress',
+      stage: 'npc',
+      message: 'NPC 顾长歌 · 注入人格',
+    });
     expect(ev.agent).toBe('npc');
     expect(ev.npc).toBe('顾长歌');
     expect(ev.text).toBe('NPC 顾长歌 · 注入人格');
@@ -239,7 +245,11 @@ describe('fetchRegenerate（POST /api/regenerate，30s 超时）', () => {
   it('ok=false / 缺 campaign：抛契约错误', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, applied: [] }) }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, applied: [] }),
+      }),
     );
     await expect(fetchRegenerate('c1', 'evt-1')).rejects.toThrow(/缺少 campaign/);
   });
@@ -324,9 +334,11 @@ describe('live 判定与数据源', () => {
   });
 
   it('loadCampaign：live 时 GET /api/campaigns/<id>', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 'c1', title: '实时' }) });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'c1', title: '实时' }),
+    });
     vi.stubGlobal('fetch', fetchMock);
     const campaign = await loadCampaign(true, 'c1');
     expect(fetchMock).toHaveBeenCalledWith('/api/campaigns/c1');
@@ -334,7 +346,7 @@ describe('live 判定与数据源', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loadCampaign：live API 失败 → 回退静态 public/campaign.json', async () => {
+  it('loadCampaign：live API 失败 → 显式错误，不能采用演示剧本', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
@@ -344,9 +356,8 @@ describe('live 判定与数据源', () => {
         json: async () => ({ id: 'static-1', title: '静态剧本' }),
       });
     vi.stubGlobal('fetch', fetchMock);
-    const campaign = await loadCampaign(true, 'c1');
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${import.meta.env.BASE_URL}campaign.json`);
-    expect(campaign.title).toBe('静态剧本');
+    await expect(loadCampaign(true, 'c1')).rejects.toThrow('HTTP 404');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
 
@@ -425,8 +436,7 @@ function sseStreamResponse(chunks: string[]): FakeResponse {
   return { ok: true, status: 200, body };
 }
 
-const STATIC_PROGRESS_LINE =
-  '{"ts":"t","agent":"kp","step":"读取模组","text":"静态回退内容"}\n';
+const STATIC_PROGRESS_LINE = '{"ts":"t","agent":"kp","step":"读取模组","text":"静态回退内容"}\n';
 
 /** 契约格式 SSE 帧：`data:{json}\n\n`（与 serve.py sse_frame 一致）。 */
 function sseData(payload: unknown): string {
@@ -622,8 +632,7 @@ describe('ProgressBand（live=1 fetch POST /api/generate 流式；失败/错误�
   it('错误帧 data:{error} → 回退静态 progress.jsonl', async () => {
     stubBrowserApi({ reducedMotion: true });
     const fetchMock = routeFetch({
-      generate: () =>
-        Promise.resolve(sseStreamResponse([sseData({ error: '生成失败' })])),
+      generate: () => Promise.resolve(sseStreamResponse([sseData({ error: '生成失败' })])),
     });
     vi.stubGlobal('fetch', fetchMock);
     await renderProgressBand(root, { live: true });
@@ -654,12 +663,14 @@ describe('fetchGenerateStream：POST /api/generate 流式解析', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('POST body={module_text,llm:false}，一冲多帧按序产出', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseStreamResponse([
-        sseData({ stage: 'plan', message: '拟定幕结构' }) +
-          sseData({ stage: 'npc', message: 'NPC 顾长歌' }),
-      ]),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        sseStreamResponse([
+          sseData({ stage: 'plan', message: '拟定幕结构' }) +
+            sseData({ stage: 'npc', message: 'NPC 顾长歌' }),
+        ]),
+      );
     vi.stubGlobal('fetch', fetchMock);
     const frames = await collectStream(fetchGenerateStream('雾港之夜'));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -684,9 +695,9 @@ describe('fetchGenerateStream：POST /api/generate 流式解析', () => {
   it('半帧跨 chunk：缓冲续接后完整产出', async () => {
     const frame = sseData({ stage: 'write', message: '写作幕内容' });
     const half = Math.ceil(frame.length / 2);
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseStreamResponse([frame.slice(0, half), frame.slice(half)]),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(sseStreamResponse([frame.slice(0, half), frame.slice(half)]));
     vi.stubGlobal('fetch', fetchMock);
     const frames = await collectStream(fetchGenerateStream('x'));
     expect(frames).toHaveLength(1);
@@ -694,9 +705,9 @@ describe('fetchGenerateStream：POST /api/generate 流式解析', () => {
   });
 
   it('done 帧产出 campaign', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseStreamResponse([sseData({ done: true, campaign: { id: 'c-1' } })]),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(sseStreamResponse([sseData({ done: true, campaign: { id: 'c-1' } })]));
     vi.stubGlobal('fetch', fetchMock);
     const frames = await collectStream(fetchGenerateStream('x'));
     expect(frames).toHaveLength(1);
@@ -746,6 +757,7 @@ describe('NodeDrawer「重生成」按钮（live 调 fetchRegenerate → patch s
     history.replaceState({}, '', locationPath);
     useGraphStore.getState().loadGraph(freshNodes(), freshEdges, 'campaign-1');
     useGraphStore.getState().selectNode('evt-1');
+    useGraphStore.setState({ revision: locationPath.includes('live=1') ? 1 : null });
     act(() => {
       root.render(createElement(NodeDrawer));
     });
@@ -770,7 +782,12 @@ describe('NodeDrawer「重生成」按钮（live 调 fetchRegenerate → patch s
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, campaign: regeneratedCampaign, applied: ['evt-1'] }),
+      json: async () => ({
+        ok: true,
+        campaign: regeneratedCampaign,
+        revision: 2,
+        applied: ['evt-1'],
+      }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const btn = regenerateButton();
@@ -783,7 +800,11 @@ describe('NodeDrawer「重生成」按钮（live 调 fetchRegenerate → patch s
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/regenerate');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(String(init.body))).toEqual({ campaign_id: 'campaign-1', node_id: 'evt-1' });
+    expect(JSON.parse(String(init.body))).toEqual({
+      campaign_id: 'campaign-1',
+      node_id: 'evt-1',
+      expected_revision: 1,
+    });
     // store 补丁：节点 data 替换 + 边重建
     const n = useGraphStore.getState().nodes.find((x) => x.id === 'evt-1')!;
     expect(n.data.title).toBe('密道封条（新）');
@@ -792,10 +813,7 @@ describe('NodeDrawer「重生成」按钮（live 调 fetchRegenerate → patch s
 
   it('live：fetch 失败 → 显示错误，节点数据不变', async () => {
     renderDrawer('/?live=1');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new Error('network down')),
-    );
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     const btn = regenerateButton();
     await act(async () => {
       btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));

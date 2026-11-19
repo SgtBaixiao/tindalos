@@ -1,0 +1,126 @@
+{
+  "stage": "after-ui-refactor",
+  "compression": "gzip level 9",
+  "files": [
+    {
+      "file": "assets/index-DKtfWSxM.js",
+      "bytes": 203855,
+      "gzip_bytes": 64306
+    },
+    {
+      "file": "assets/index-CKxD7ohl.css",
+      "bytes": 13504,
+      "gzip_bytes": 3756
+    }
+  ],
+  "totals": {
+    "js_bytes": 203855,
+    "js_gzip_bytes": 64306,
+    "css_bytes": 13504,
+    "css_gzip_bytes": 3756
+  },
+  "budgets": {
+    "js_bytes": 230000,
+    "js_gzip_bytes": 75000,
+    "css_bytes": 16000,
+    "css_gzip_bytes": 5000
+  },
+  "routes": {
+    "src/site/EvalDetailView.tsx": [
+      {
+        "file": "assets/EvalDetailView-BTMqnTsx.js",
+        "bytes": 9852,
+        "gzip_bytes": 2990
+      }
+    ],
+    "src/site/EvalView.tsx": [
+      {
+        "file": "assets/EvalView-Dhr8Zkfw.js",
+        "bytes": 1989,
+        "gzip_bytes": 1020
+      }
+    ],
+    "src/site/HistoryView.tsx": [
+      {
+        "file": "assets/HistoryView-ByMVpTTN.js",
+        "bytes": 2179,
+        "gzip_bytes": 947
+      },
+      {
+        "file": "assets/HistoryView-B2eQumGy.css",
+        "bytes": 213,
+        "gzip_bytes": 174
+      },
+      {
+        "file": "assets/cards-DFGN54Wd.css",
+        "bytes": 756,
+        "gzip_bytes": 420
+      }
+    ],
+    "src/site/LibraryView.tsx": [
+      {
+        "file": "assets/LibraryView-3bEeRy8y.js",
+        "bytes": 5682,
+        "gzip_bytes": 2113
+      },
+      {
+        "file": "assets/LibraryView-B0Jopwh6.css",
+        "bytes": 4127,
+        "gzip_bytes": 1285
+      }
+    ],
+    "src/site/MemoryView.tsx": [
+      {
+        "file": "assets/MemoryView-avsCX5zz.js",
+        "bytes": 7815,
+        "gzip_bytes": 2516
+      },
+      {
+        "file": "assets/MemoryView-BDbC-vJz.css",
+        "bytes": 4108,
+        "gzip_bytes": 1024
+      },
+      {
+        "file": "assets/cards-DFGN54Wd.css",
+        "bytes": 756,
+        "gzip_bytes": 420
+      }
+    ],
+    "src/site/QaView.tsx": [
+      {
+        "file": "assets/QaView-CMbvmrLN.js",
+        "bytes": 2509,
+        "gzip_bytes": 1327
+      },
+      {
+        "file": "assets/QaView-5h_-u874.css",
+        "bytes": 2112,
+        "gzip_bytes": 767
+      }
+    ],
+    "src/site/ReplayView.tsx": [
+      {
+        "file": "assets/ReplayView-DemnQPja.js",
+        "bytes": 3499,
+        "gzip_bytes": 1437
+      },
+      {
+        "file": "assets/ReplayView-BOLAxMHl.css",
+        "bytes": 1817,
+        "gzip_bytes": 654
+      }
+    ],
+    "src/site/WorkbenchView.tsx": [
+      {
+        "file": "assets/WorkbenchView-DeUfUhUp.js",
+        "bytes": 258945,
+        "gzip_bytes": 82973
+      },
+      {
+        "file": "assets/WorkbenchView-CWuI89DT.css",
+        "bytes": 30618,
+        "gzip_bytes": 5647
+      }
+    ]
+  }
+}
