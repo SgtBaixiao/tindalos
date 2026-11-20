@@ -69,3 +69,5 @@ python3 -B /Users/bytedance/.agents/skills/haohao-shuohua/scripts/quick_scan.py 
 python3 -B /Users/bytedance/.agents/skills/haohao-shuohua/scripts/quick_scan.py \
   README.md docs/refactor-decision-log.md docs/writing-validation.md
 ```
+
+2026-11-20 补充 D027，记录上传认证问题、用户对专用部署密钥的授权，以及 GitHub 要求本人重新验证密码的状态。沿用上述三份文件扫描命令，六类命中均为 0，退出码 0，无豁免项。提交已生成、远端尚未更新和密钥尚未添加分别核对，没有将准备状态记为完成。
