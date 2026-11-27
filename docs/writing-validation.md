@@ -90,3 +90,18 @@ python3 /Users/bytedance/.agents/skills/clear-writing/scripts/clarity_check.py \
 ```
 
 补充浏览器流程后，扫描发现确认事实 `目击者.生命=存活` 中的半角点 1 处。该字段是受保护的实际输入，改为代码标记后保留原值。最终五份文档再次实际扫描，均为 clean，九类合计 0 命中，退出码 0，无豁免项。扫描器默认提示模式的退出码不能单独代表无问题，本轮同时核对逐项计数。扫描与作者自检没有替代真实读者测试。
+
+## 2026-11-27 剩余工程与交付
+
+读者仍是维护者和评审者。新增工程报告与公开 UI 观察记录，README 更新本轮入口；既有历史扫描记录保留。事实核对覆盖 3 项真实回环回归、35 项 Moby 路径断言、32 客户端的 64 次离线提交，以及 390×844 和 390×820 两次不同视口。取消和完成任务身份分别核对，没有把等待脚本作为性能证据，也没有把本机资源 smoke 作为容器构建成功。
+
+实际执行以下扫描，七份文档九类合计 0 命中，退出码 0，无豁免项。原始输出保存在 `.local-preserved/herdr-remaining-20261127/leader-clarity.log`。后续交付状态更新继续使用同一命令核对；模型质量、独立 KP、浏览器焦点与生产服务部署保持实际状态。
+
+```bash
+python3 /Users/bytedance/.agents/skills/clear-writing/scripts/clarity_check.py \
+  README.md docs/refactor-herdr-validation.md docs/refactor-herdr-ui-observations.md \
+  docs/refactor-herdr-delivery.md docs/refactor-remaining-engineering.md \
+  docs/refactor-decision-log.md docs/writing-validation.md
+```
+
+正文没有为改善表达增加产品决定或成功结论。作者自检与字面扫描分别记录，未进行真实读者测试。

@@ -6,6 +6,27 @@ on:
   pull_request:
 
 jobs:
+  production-image:
+    name: production image (offline HTTP + restart)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SMOKE_IMAGE: tindalos-production:ci
+      SMOKE_CONTAINER: tindalos-production-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build actual production image
+        run: docker build --progress=plain -f deploy/Dockerfile -t "$SMOKE_IMAGE" .
+      - name: Probe isolated offline runtime and restart persistence
+        run: bash scripts/smoke_production.sh "$SMOKE_IMAGE" "$SMOKE_CONTAINER"
+      - name: Ensure container cleanup
+        if: always()
+        run: |
+          if docker container inspect "$SMOKE_CONTAINER" >/dev/null 2>&1; then
+            docker logs "$SMOKE_CONTAINER" || true
+            docker rm --force --volumes "$SMOKE_CONTAINER"
+          fi
+
   backend:
     name: backend (pytest)
     runs-on: ubuntu-latest
