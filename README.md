@@ -2,7 +2,7 @@
 
 Tindalos 为人类守秘人（KP）提供可编辑、可保存、可续用的 TRPG 备团材料。工作台贯通模组导入、任务生成、剧本修订、实际场次记录、续团和评测反馈。人类 KP 确认发生了什么，并决定采用哪些创作建议。
 
-[GitHub](https://github.com/SgtBaixiao/tindalos) · [静态展示](https://sgtbaixiao.github.io/tindalos/) · [运行架构](docs/runtime-architecture.md) · [界面验收](docs/ui-refactor-validation.md) · [前端规范](docs/frontend-architecture.md) · [决策日志](docs/refactor-decision-log.md)
+[GitHub](https://github.com/SgtBaixiao/tindalos) · [静态展示](https://sgtbaixiao.github.io/tindalos/) · [运行架构](docs/runtime-architecture.md) · [界面验收](docs/ui-refactor-validation.md) · [前端规范](docs/frontend-architecture.md) · [决策日志](docs/refactor-decision-log.md) · [本轮 Herdr 验收](docs/refactor-herdr-validation.md) · [交付记录](docs/refactor-herdr-delivery.md)
 
 静态展示只提供前端素材。导入、生成、编辑保存与场次记录需要 Python 服务。新版本的展示发布状态见 [GitHub Actions](https://github.com/SgtBaixiao/tindalos/actions/workflows/pages.yml)。
 
@@ -66,7 +66,7 @@ npm run build
 npm run check:bundle
 ```
 
-2026-11-19 本机验收结果：上一轮后端 506 项通过、1 项跳过；本轮前端 110 项通过；生产构建、格式、模块与首屏体积检查通过。界面更新和前端性能见[界面验收](docs/ui-refactor-validation.md)，存储与生成验证见[工程验收](docs/refactor-validation.md)。
+2026-11-27 本机验收：完整前端 118 项通过，格式、模块、类型、生产构建和首屏体积检查通过。后端完整检查、最后补测与生产镜像冒烟分别记录，具体数量及范围见[本轮验收](docs/refactor-herdr-validation.md)和[工程补验](docs/refactor-remaining-engineering.md)。界面更新和前端性能见[界面验收](docs/ui-refactor-validation.md)，存储与生成验证见[工程验收](docs/refactor-validation.md)。
 
 ## 数据与部署
 
@@ -80,7 +80,16 @@ uv run --locked --all-extras python tools/backup_data.py --data data --out .loca
 
 工具取得服务独占锁，对 SQLite 使用备份 API，复制其他素材。备份目的地必须是新目录。自定义站点库也须放在同一数据目录内；恢复时停止服务，保留当前目录，将完整备份复制为新的数据目录。
 
-容器构建入口为 `deploy/Dockerfile`，使用两个依赖锁文件，单进程提供前端和 API。本机尚未执行 Docker 构建。
+容器构建入口为 `deploy/Dockerfile`，使用两个依赖锁文件，单进程提供前端和 API。CI 在 PR 和 main 上构建实际生产镜像，并检查离线 HTTP 生成、资源与重启持久化；运行时无外部网络且不映射公开端口。本机未安装 Docker，远端实际结果见[交付记录](docs/refactor-herdr-delivery.md)。
+
+已有 Docker 时可复用检查入口：
+
+```bash
+docker build -f deploy/Dockerfile -t tindalos:smoke .
+bash scripts/smoke_production.sh tindalos:smoke tindalos-local-smoke
+```
+
+冒烟使用隔离容器内数据，完成后删除该容器。此脚本的等待工具 `timeout` 适用于 CI 的 Linux 环境。
 
 ## 研究与设计
 

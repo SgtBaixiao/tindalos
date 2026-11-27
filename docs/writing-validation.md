@@ -73,3 +73,35 @@ python3 -B /Users/bytedance/.agents/skills/haohao-shuohua/scripts/quick_scan.py 
 2026-11-20 补充 D027，记录上传认证问题、用户对专用部署密钥的授权，以及 GitHub 要求本人重新验证密码的状态。沿用上述三份文件扫描命令，六类命中均为 0，退出码 0，无豁免项。提交已生成、远端尚未更新和密钥尚未添加分别核对，没有将准备状态记为完成。
 
 用户完成身份验证后，D027 更新为密钥已添加。核对仓库名称、Read/write 权限、公钥指纹及 SSH 443 端口远端读取结果，私钥继续保存在忽略目录。再次运行上述扫描命令，六类命中均为 0，退出码 0，无豁免项；上传和自动检查保留各自证据入口。
+
+## 2026-11-27 Herdr 重构文档
+
+本轮使用新安装的 `clear-writing`，已读取正文、技术写作与编辑记录参考。此前记录按发生日期保留，不将旧 Skill 的结果改写为本轮扫描结果。
+
+读者是维护者、实现者与评审者；文档分别供选择工程方案、确认实际 Skill 入口、核对验收与继续开发使用。材料来自本轮原始命令输出、冻结源码、两轮独立评审和实际 UI 观察。保留 AC 编号、规则优先级、测试数量、字节数、命令及验收缺口；独立评审指出的疑点修正为明确的原行为说明，浏览器结论绑定现场观察与保存记录，没有补造产品决定。
+
+实际扫描命令如下，结果保存在本地 `.local-preserved/herdr-20261127/leader-final-clarity.log`。事实回读同时核对基线、新增测试与原始日志。
+
+```bash
+python3 /Users/bytedance/.agents/skills/clear-writing/scripts/clarity_check.py \
+  docs/refactor-herdr-plan.md docs/herdr-skill-check.md \
+  docs/refactor-herdr-validation.md docs/refactor-decision-log.md \
+  docs/writing-validation.md
+```
+
+补充浏览器流程后，扫描发现确认事实 `目击者.生命=存活` 中的半角点 1 处。该字段是受保护的实际输入，改为代码标记后保留原值。最终五份文档再次实际扫描，均为 clean，九类合计 0 命中，退出码 0，无豁免项。扫描器默认提示模式的退出码不能单独代表无问题，本轮同时核对逐项计数。扫描与作者自检没有替代真实读者测试。
+
+## 2026-11-27 剩余工程与交付
+
+读者仍是维护者和评审者。新增工程报告与公开 UI 观察记录，README 更新本轮入口；既有历史扫描记录保留。事实核对覆盖 3 项真实回环回归、35 项 Moby 路径断言、32 客户端的 64 次离线提交，以及 390×844 和 390×820 两次不同视口。取消和完成任务身份分别核对，没有把等待脚本作为性能证据，也没有把本机资源 smoke 作为容器构建成功。
+
+实际执行以下扫描，七份文档九类合计 0 命中，退出码 0，无豁免项。原始输出保存在 `.local-preserved/herdr-remaining-20261127/leader-clarity.log`。后续交付状态更新继续使用同一命令核对；模型质量、独立 KP、浏览器焦点与生产服务部署保持实际状态。
+
+```bash
+python3 /Users/bytedance/.agents/skills/clear-writing/scripts/clarity_check.py \
+  README.md docs/refactor-herdr-validation.md docs/refactor-herdr-ui-observations.md \
+  docs/refactor-herdr-delivery.md docs/refactor-remaining-engineering.md \
+  docs/refactor-decision-log.md docs/writing-validation.md
+```
+
+正文没有为改善表达增加产品决定或成功结论。作者自检与字面扫描分别记录，未进行真实读者测试。

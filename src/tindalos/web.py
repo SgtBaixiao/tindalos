@@ -277,33 +277,14 @@ def create_app() -> FastAPI:
     """构造站点后端 app（测试可隔离实例；数据目录随环境变量 TINDALOS_DATA_DIR）。"""
 
     from tindalos.jobs import JobRuntime, CapacityError, TERMINAL
-    from tindalos import workspace
-
-    def execute_generation(body, emit):
-        import inspect
-        from tindalos import memory_entries as me
-        cid = body.get("campaign_id") or "campaign-" + uuid.uuid4().hex
-        continuation = me.continuation_context(cid, _data_dir() / "store" / "memory_entries.sqlite")
-        if body.get("campaign_id"):
-            adopted = body['base_snapshot']
-            outline = {'title':adopted.get('title'), 'acts':[
-                {'title':a.get('title'),'summary':a.get('summary')} for a in adopted.get('acts',[])]}
-            continuation += "\n【当前采用剧本提纲】\n" + json.dumps(outline, ensure_ascii=False)[:24000]
-        options = {"module_images":body.get("module_images"),"campaign_id":cid,
-                   "rules":body.get("rules","COC7"),"continuation":continuation,"persist_memory":False}
-        options["adopted_npcs"] = body.get("base_snapshot", {}).get("npcs", {})
-        signature = inspect.signature(default_generate)
-        options = {k:v for k,v in options.items() if k in signature.parameters}
-        generated = default_generate(body["module_text"], body.get("llm",False), emit, **options)
-        if generated and body.get("campaign_id"):
-            return workspace.append_continuation(body["base_snapshot"], generated, body["expected_revision"])
-        return generated
+    from tindalos import generation_jobs, workspace
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         _modules_dir().mkdir(parents=True, exist_ok=True)
         from tindalos import history as history_mod
-        app.state.runtime = JobRuntime(execute_generation,
+        app.state.runtime = JobRuntime(
+            lambda body, emit: generation_jobs.execute(body, emit, generate=default_generate, data_dir=_data_dir()),
             workers=max(1,int(os.environ.get("TINDALOS_JOB_WORKERS","2"))),
             capacity=max(2,int(os.environ.get("TINDALOS_JOB_CAPACITY","16"))),
             max_duration=max(1,float(os.environ.get('TINDALOS_JOB_TIMEOUT','600'))))
@@ -331,13 +312,7 @@ def create_app() -> FastAPI:
 
     def submit_job(body, key=None):
         try:
-            identity = body.model_dump(exclude_none=True)
-            if key:
-                prior = app.state.runtime.lookup(key, identity)
-                if prior:
-                    return prior
-            prepared = workspace.prepare_generation(identity)
-            return app.state.runtime.submit(prepared, key=key, identity=identity)
+            return generation_jobs.submit(app.state.runtime, body.model_dump(exclude_none=True), key=key)
         except CapacityError as exc:
             raise HTTPException(429, str(exc), headers={"Retry-After":"1"})
         except history_mod.RevisionConflict as exc:

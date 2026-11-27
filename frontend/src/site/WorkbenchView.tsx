@@ -1,63 +1,31 @@
-import { useCallback, useRef, useState } from 'react';
 import App from '../App';
 import { JobProgress } from '../components/JobProgress';
-import { useGraphStore } from '../store/useGraphStore';
-import { loadRevision, request, requestKey, submitJob } from '../lib/workspace';
-import { SourceForm, type GenerationInput } from '../features/workbench/SourceForm';
+import { SourceForm } from '../features/workbench/SourceForm';
 import { SessionPanel } from '../features/workbench/SessionPanel';
-import { useCatalog } from '../features/workbench/useCatalog';
+import { useWorkbenchController } from './useWorkbenchController';
 import { PageHeader } from '../ui/PageHeader';
 import { Icon } from '../ui/Icon';
 import './styles/workbench.css';
 
 export function WorkbenchView() {
-  const { modules, campaigns, error: catalogError, refresh } = useCatalog();
-  const [jobId, setJobId] = useState<string | null>(() =>
-    localStorage.getItem('tindalos-active-job'),
-  );
-  const [busy, setBusy] = useState(Boolean(jobId));
-  const [error, setError] = useState('');
-  const [opening, setOpening] = useState(false);
-  const campaignId = useGraphStore((s) => s.campaignId);
-  const title = useGraphStore((s) => s.campaign?.title);
-  const revision = useGraphStore((s) => s.revision);
-  const mode = useGraphStore((s) => s.campaign?.generation);
-  const adopt = useGraphStore((s) => s.adoptCampaign);
-  const pending = useRef<{ key: string; body: string } | null>(null);
-  const terminal = useCallback(() => {
-    setBusy(false);
-    pending.current = null;
-    void refresh();
-  }, [refresh]);
-  const start = useCallback(
-    async (
-      body: GenerationInput | { campaign_id: string; expected_revision: number; llm: boolean },
-    ) => {
-      if (busy) return;
-      setBusy(true);
-      setError('');
-      const encoded = JSON.stringify(body);
-      try {
-        if (pending.current?.body !== encoded)
-          pending.current = { key: requestKey(), body: encoded };
-        const job = await submitJob(body, pending.current!.key);
-        localStorage.setItem('tindalos-active-job', job.id);
-        setJobId(job.id);
-      } catch (e) {
-        setError(String(e));
-        setBusy(false);
-      }
-    },
-    [busy],
-  );
-  const generate = useCallback((input: GenerationInput) => void start(input), [start]);
-  const continueCampaign = useCallback(
-    (llm: boolean) => {
-      if (campaignId && revision)
-        void start({ campaign_id: campaignId, expected_revision: revision, llm });
-    },
-    [campaignId, revision, start],
-  );
+  const {
+    modules,
+    campaigns,
+    catalogError,
+    campaignId,
+    title,
+    revision,
+    mode,
+    jobId,
+    busy,
+    opening,
+    error,
+    generate,
+    continueCampaign,
+    cancelJob,
+    openCampaign,
+    terminal,
+  } = useWorkbenchController();
   return (
     <section className="sx-workbench" data-testid="sx-workbench">
       <div className="wb-heading">
@@ -93,14 +61,7 @@ export function WorkbenchView() {
             />
           )}
           {busy && jobId && (
-            <button
-              className="sx-btn sx-btn--ghost"
-              onClick={() =>
-                request(`/api/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }).catch((e) =>
-                  setError(String(e)),
-                )
-              }
-            >
+            <button className="sx-btn sx-btn--ghost" onClick={cancelJob}>
               取消任务
             </button>
           )}
@@ -119,19 +80,7 @@ export function WorkbenchView() {
                 aria-label="打开已保存剧本"
                 value={campaignId ?? ''}
                 disabled={busy || opening}
-                onChange={async (e) => {
-                  if (!e.target.value) return;
-                  setOpening(true);
-                  setError('');
-                  try {
-                    const doc = await loadRevision(e.target.value);
-                    adopt(doc.campaign, doc.revision, false);
-                  } catch (err) {
-                    setError(String(err));
-                  } finally {
-                    setOpening(false);
-                  }
-                }}
+                onChange={(e) => openCampaign(e.target.value)}
               >
                 <option value="">选择剧本</option>
                 {campaigns.map((c) => (
